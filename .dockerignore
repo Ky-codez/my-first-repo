@@ -1,0 +1,12 @@
+# Never bake these into the image — deps are reinstalled, and user data lives
+# on the host volume, not in the image.
+**/node_modules
+backend/sipiary.db
+backend/sipiary.db-wal
+backend/sipiary.db-shm
+backend/uploads
+frontend/dist
+**/.env
+**/*.log
+.git
+.claude

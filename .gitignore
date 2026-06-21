@@ -1,0 +1,26 @@
+# Dependencies
+**/node_modules
+
+# Secrets & env — NEVER commit these
+**/.env
+**/.env.*
+!**/.env.example
+
+# Database (user data) + SQLite sidecar files
+backend/sipiary.db
+backend/sipiary.db-wal
+backend/sipiary.db-shm
+
+# Uploaded images (user content)
+backend/uploads/
+
+# Build output
+frontend/dist/
+
+# Logs & OS cruft
+**/*.log
+.DS_Store
+Thumbs.db
+
+# Claude Code local settings (personal — keep launch.json, ignore local prefs)
+.claude/settings.local.json

@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="20%" r="92%">
+      <stop offset="0%" stop-color="#43101d"/>
+      <stop offset="55%" stop-color="#180810"/>
+      <stop offset="100%" stop-color="#0b0406"/>
+    </radialGradient>
+    <linearGradient id="cover" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#9c2b3c"/>
+      <stop offset="100%" stop-color="#5a1521"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f4dc9c"/>
+      <stop offset="100%" stop-color="#c69a45"/>
+    </linearGradient>
+    <clipPath id="coverClip"><rect x="158" y="112" width="192" height="282" rx="15"/></clipPath>
+    <clipPath id="bowl"><circle cx="256" cy="214" r="34"/></clipPath>
+  </defs>
+
+  <rect width="512" height="512" fill="url(#bg)"/>
+
+  <!-- drop shadow -->
+  <ellipse cx="258" cy="404" rx="116" ry="19" fill="#000" opacity="0.30"/>
+
+  <!-- page block peeking on the right + bottom -->
+  <rect x="166" y="118" width="196" height="284" rx="10" fill="#f1e4d2"/>
+  <g stroke="#d9c5ae" stroke-width="2">
+    <line x1="351" y1="150" x2="361" y2="150"/>
+    <line x1="351" y1="178" x2="361" y2="178"/>
+    <line x1="351" y1="206" x2="361" y2="206"/>
+    <line x1="351" y1="234" x2="361" y2="234"/>
+    <line x1="351" y1="262" x2="361" y2="262"/>
+    <line x1="351" y1="290" x2="361" y2="290"/>
+    <line x1="351" y1="318" x2="361" y2="318"/>
+    <line x1="351" y1="346" x2="361" y2="346"/>
+  </g>
+
+  <!-- cover -->
+  <rect x="158" y="112" width="192" height="282" rx="15" fill="url(#cover)"/>
+  <g clip-path="url(#coverClip)">
+    <rect x="158" y="112" width="26" height="282" fill="#000" opacity="0.16"/>
+    <rect x="186" y="112" width="3" height="282" fill="#000" opacity="0.12"/>
+    <rect x="158" y="112" width="192" height="40" fill="#fff" opacity="0.05"/>
+  </g>
+
+  <!-- gold wine-glass emblem on the cover -->
+  <g clip-path="url(#bowl)">
+    <rect x="220" y="214" width="72" height="44" fill="#c0392b"/>
+    <ellipse cx="256" cy="214" rx="34" ry="5" fill="#d94e3f"/>
+  </g>
+  <circle cx="256" cy="214" r="34" fill="none" stroke="url(#gold)" stroke-width="6"/>
+  <rect x="251" y="248" width="10" height="44" rx="3" fill="url(#gold)"/>
+  <ellipse cx="256" cy="296" rx="30" ry="7" fill="url(#gold)"/>
+
+  <!-- bookmark ribbon -->
+  <path d="M300 100 L324 100 L324 166 L312 180 L300 166 Z" fill="url(#gold)"/>
+  <path d="M300 100 L324 100 L324 108 L300 108 Z" fill="#000" opacity="0.12"/>
+</svg>

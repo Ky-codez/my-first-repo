@@ -1,0 +1,16 @@
+# Litestream — continuously replicates the SQLite database to object storage
+# (Cloudflare R2 / S3-compatible). This is the off-site, near-real-time backup.
+#
+# Credentials are read from the environment by Litestream automatically:
+#   LITESTREAM_ACCESS_KEY_ID, LITESTREAM_SECRET_ACCESS_KEY
+# The bucket + endpoint are injected from Fly secrets (R2_BUCKET, R2_ENDPOINT).
+# If R2_BUCKET is unset, the entrypoint skips Litestream so the app still runs.
+dbs:
+  - path: /data/sipiary.db
+    replicas:
+      - type: s3
+        bucket: ${R2_BUCKET}
+        path: sipiary.db
+        endpoint: ${R2_ENDPOINT}
+        region: auto
+        force-path-style: true

@@ -1,0 +1,26 @@
+# Fly.io config for Sipiary.
+# `app` must be globally unique → it becomes https://<app>.fly.dev
+# Change it if "sipiary" is taken (e.g. sipiary-app, sipiary-wine).
+app = "sipiary"
+primary_region = "iad"   # pick one near your users: iad (US-East), lhr (London),
+                         # fra (Frankfurt), sin (Singapore), syd (Sydney), nrt (Tokyo)
+
+[build]
+
+[env]
+  DATA_DIR   = "/data"   # SQLite + uploads live on the mounted volume below
+  NODE_ENV   = "production"
+  PORT       = "3000"
+
+[http_service]
+  internal_port       = 3000
+  force_https         = true
+  auto_stop_machines  = "stop"   # sleep when idle to keep cost ~$0
+  auto_start_machines = true      # wake on the next request (a few-second cold start)
+  min_machines_running = 0        # bump to 1 to stay always-warm (no cold starts)
+
+# Persistent disk — this is what keeps your data across deploys/restarts.
+# SQLite needs ONE machine, so do not scale this app beyond a single instance.
+[mounts]
+  source      = "sipiary_data"
+  destination = "/data"

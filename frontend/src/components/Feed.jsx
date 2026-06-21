@@ -1,0 +1,198 @@
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import WineCard from './WineCard.jsx';
+import SkeletonCard from './SkeletonCard.jsx';
+import MainMenu from './MainMenu.jsx';
+import { getMoonInfo, TYPE_INFO, PHASE_INFO } from '../utils/moonCalendar.js';
+import { useLang } from '../i18n.jsx';
+
+const API = '';
+
+export default function Feed({ currentUser, onAddWine, onRelog, onUserClick, onLunarClick, onCellarClick, onWineClick, onWineryClick, theme, onThemeChange, onHome, onLogout, onProfileClick, onSearchClick }) {
+  const { t } = useLang();
+  const todayMoon  = getMoonInfo(new Date());
+  const todayType  = TYPE_INFO[todayMoon.type];
+  const todayPhase = PHASE_INFO[todayMoon.phase];
+  const [wines,    setWines]    = useState([]);
+  const [loading,  setLoading]  = useState(true);
+  const [feedMode, setFeedMode] = useState('explore'); // 'explore' | 'following'
+
+  const switchMode = (mode) => {
+    if (mode !== feedMode) setFeedMode(mode);
+  };
+
+  const [suggestions, setSuggestions] = useState([]);
+  const [suggestionsLoaded, setSuggestionsLoaded] = useState(false);
+  const [streak, setStreak] = useState(0);  // consecutive weeks with ≥1 log
+  // Pick a stable inject position (3–5) each time the wine list changes
+  const pymkInsertAt = useMemo(() => 3 + Math.floor(Math.random() * 3), [wines.length]);
+
+  useEffect(() => {
+    if (!currentUser) return;
+    setSuggestionsLoaded(false);
+    fetch(`${API}/api/users/suggestions?currentUserId=${currentUser.id}`)
+      .then(r => r.json())
+      .then(data => { setSuggestions(Array.isArray(data) ? data : []); setSuggestionsLoaded(true); })
+      .catch(() => setSuggestionsLoaded(true));
+    // Logging streak (weeks in a row) — surfaced as a chip to drive retention.
+    fetch(`${API}/api/users/${currentUser.id}/badges`)
+      .then(r => r.json())
+      .then(d => setStreak(d.streak || 0))
+      .catch(() => {});
+  }, [currentUser]);
+
+  const handleFollow = async (userId) => {
+    await fetch(`${API}/api/users/${userId}/follow`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ follower_id: currentUser.id }),
+    });
+    setSuggestions(s => s.filter(u => u.id !== userId));
+    fetchWines();
+  };
+
+
+  const fetchWines = useCallback(() => {
+    setLoading(true);
+    const params = new URLSearchParams({ currentUserId: currentUser?.id || 0 });
+    if (feedMode === 'following') params.append('feed', 'following');
+    fetch(`${API}/api/wines?${params}`)
+      .then(r => r.json())
+      .then(data => { setWines(Array.isArray(data) ? data : []); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, [feedMode, currentUser]);
+
+  useEffect(() => {
+    const t = setTimeout(fetchWines, 0);
+    return () => clearTimeout(t);
+  }, [fetchWines]);
+
+  const handleDelete = async (id) => {
+    await fetch(`${API}/api/wines/${id}`, { method: 'DELETE' });
+    setWines(w => w.filter(x => x.id !== id));
+  };
+
+  return (
+    <div className="feed-page">
+      {/* Top nav — logo + search + hamburger menu */}
+      <header className="feed-header">
+        <button className="feed-logo" onClick={onHome}>🍷 Sipiary</button>
+      </header>
+
+      {/* Profile completion banner — only for users with no avatar */}
+      {!currentUser?.avatar_path && (
+        <div className="profile-prompt-banner">
+          <span>📷 Add a profile photo to personalise your Sipiary</span>
+          <button className="profile-prompt-btn" onClick={onProfileClick}>Set up →</button>
+        </div>
+      )}
+
+      {/* Today's Moon — the biodynamic signal, surfaced into the daily loop.
+          Tap to open the full lunar calendar. */}
+      <button
+        className="moon-today-card"
+        onClick={onLunarClick}
+        style={{ borderColor: todayType.color + '66', background: todayType.bg }}
+      >
+        <span className="mtc-emoji">{todayType.emoji}</span>
+        <span className="mtc-body">
+          <span className="mtc-title" style={{ color: todayType.color }}>
+            Today is a {todayType.label}
+          </span>
+          <span className="mtc-sub">{todayType.desc}</span>
+        </span>
+        <span className="mtc-phase">
+          <span className="mtc-phase-emoji">{todayPhase.emoji}</span>
+          <span className="mtc-phase-name" style={{ color: todayPhase.color }}>
+            {todayPhase.name} {todayMoon.ascending ? '↑' : '↓'}
+          </span>
+        </span>
+      </button>
+
+      {/* Logging streak — celebrates consistency, nudges users back */}
+      {streak > 0 && (
+        <button className="streak-chip" onClick={onAddWine}>
+          🔥 <strong>{streak}-week streak</strong>
+          <span>{streak === 1 ? 'Logged this week — nice!' : 'Log a wine this week to keep it going'}</span>
+        </button>
+      )}
+
+      {/* Feed mode toggle */}
+      <div className="feed-mode-toggle">
+        <button className={`feed-mode-btn${feedMode === 'explore' ? ' active' : ''}`} onClick={() => switchMode('explore')}>
+          {t('feed.explore')}
+        </button>
+        <button className={`feed-mode-btn${feedMode === 'following' ? ' active' : ''}`} onClick={() => switchMode('following')}>
+          {t('feed.following')}
+        </button>
+      </div>
+
+      {/* Feed — keyed by mode so switching plays the gentle fade-in */}
+      <div className="feed-list" key={feedMode}>
+        {loading && <SkeletonCard count={3} />}
+        {!loading && wines.length === 0 && (
+          <div className="empty-feed">
+            {feedMode === 'following'
+              ? <>
+                  <p>👥 Your Following feed is empty</p>
+                  <p style={{fontSize:'0.85rem',color:'var(--text-muted)',marginTop:'0.5rem'}}>
+                    {suggestions.length > 0 ? 'Follow someone to fill it up:' : 'Find people via search and follow them!'}
+                  </p>
+                  {suggestions.length > 0 && (
+                    <div className="follow-suggestions">
+                      {suggestions.map(u => (
+                        <div key={u.id} className="fs-card">
+                          <button className="fs-user" onClick={() => onUserClick(u.id)}>
+                            {u.avatar_path
+                              ? <img className="fs-avatar" src={`${API}${u.avatar_path}`} alt="" loading="lazy" decoding="async" />
+                              : <span className="fs-avatar fs-avatar-fallback">{u.username.slice(0, 2).toUpperCase()}</span>
+                            }
+                            <span className="fs-info">
+                              <span className="fs-name">@{u.username}</span>
+                              {u.match != null && <span className="fs-match">🧬 {u.match}% taste match</span>}
+                              {u.reason && <span className="fs-reason">{u.reason}</span>}
+                              <span className="fs-meta">{u.post_count} {u.post_count === 1 ? 'post' : 'posts'} · {u.follower_count} {u.follower_count === 1 ? 'follower' : 'followers'}</span>
+                            </span>
+                          </button>
+                          <button className="fs-follow-btn" onClick={() => handleFollow(u.id)}>Follow</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              : <><p>🍷 No wines found.</p><button className="btn-primary" onClick={onAddWine}>Log your first wine</button></>
+            }
+          </div>
+        )}
+        {wines.map((w, i) => (
+          <div key={w.id}>
+            <WineCard wine={w} currentUser={currentUser} onDelete={handleDelete} onRelog={onRelog} onUserClick={onUserClick} onWineClick={onWineClick} onWineryClick={onWineryClick} />
+            {feedMode === 'explore' && i === pymkInsertAt - 1 && suggestionsLoaded && suggestions.length > 0 && (
+              <div className="pymk-section">
+                <div className="pymk-header">
+                  <span className="pymk-title">{t('feed.pymk')}</span>
+                </div>
+                <div className="pymk-scroll">
+                  {suggestions.map(u => (
+                    <div key={u.id} className="pymk-card">
+                      <button className="pymk-user" onClick={() => onUserClick(u.id)}>
+                        {u.avatar_path
+                          ? <img className="pymk-avatar" src={`${API}${u.avatar_path}`} alt="" loading="lazy" decoding="async" />
+                          : <span className="pymk-avatar pymk-avatar-fallback">{u.username.slice(0, 2).toUpperCase()}</span>
+                        }
+                        <span className="pymk-name">@{u.username}</span>
+                        {u.match != null && <span className="pymk-match">🧬 {u.match}% match</span>}
+                        {u.reason && <span className="pymk-reason">{u.reason}</span>}
+                        <span className="pymk-meta">{u.post_count} {u.post_count === 1 ? 'post' : 'posts'}</span>
+                      </button>
+                      <button className="pymk-follow-btn" onClick={() => handleFollow(u.id)}>Follow</button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
