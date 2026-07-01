@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Heart, MessageCircle, Share2, MapPin, Wine, Calendar } from '@phosphor-icons/react';
+import { Wine } from '@phosphor-icons/react';
 import WineCard from './WineCard';
 import LoginToEngageModal from './LoginToEngageModal';
 import WinePassport from './WinePassport';
