@@ -67,10 +67,12 @@ export default function WinePassport({ onBack, userId, onWineClick }) {
       const pins = [];               // famous regions → glowing dots
       const regionSet = new Set();
       const tastedPts = [];          // every located wine's [lat,lng] → initial globe facing
+      const placeMap = new Map();    // name → [lat,lng] — unique spots for the journey arcs
       for (const w of wines) {
         const p = resolveLocation(w.location);
         if (!p) continue;
         tastedPts.push([p.lat, p.lng]);
+        placeMap.set(p.name, [p.lat, p.lng]);
         if (p.kind === 'region') { regionSet.add(p.name); pins.push(p); }
         const cc = canon(p.country);
         if (!byCountry.has(cc)) byCountry.set(cc, { country: p.country, wines: [], count: 0, total: 0 });
@@ -225,15 +227,41 @@ export default function WinePassport({ onBack, userId, onWineClick }) {
       );
       scene.add(atmo);
 
-      // Region pins — a bright core plus a soft additive halo so tasted regions
-      // twinkle like map markers.
+      // Region pins — a bright core plus a soft additive halo that pulses, so
+      // tasted regions feel alive rather than static.
+      const pulseHalos = [];
       for (const p of pins) {
         const at = latLng(p.lat, p.lng, 1.012, THREE);
         const dot = new THREE.Mesh(new THREE.SphereGeometry(0.02, 12, 12), new THREE.MeshBasicMaterial({ color: 0xffe9a8 }));
         dot.position.copy(at); globe.add(dot);
         const halo = new THREE.Mesh(new THREE.SphereGeometry(0.05, 16, 16),
           new THREE.MeshBasicMaterial({ color: 0xffcf6a, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false }));
-        halo.position.copy(at); globe.add(halo);
+        halo.position.copy(at); halo.userData.phase = Math.random() * Math.PI * 2; globe.add(halo);
+        pulseHalos.push(halo);
+      }
+
+      // Journey arcs — great-circle-ish curves linking every place you've tasted,
+      // west→east, with a glowing "traveller" that flies along each leg. This is
+      // the wine-journey story, drawn on the planet.
+      const travellers = [];
+      const places = [...placeMap.values()].sort((a, b) => a[1] - b[1]);   // by longitude
+      for (let i = 0; i < places.length - 1; i++) {
+        const A = latLng(places[i][0], places[i][1], 1.01, THREE);
+        const B = latLng(places[i + 1][0], places[i + 1][1], 1.01, THREE);
+        const lift = 1 + 0.12 + A.distanceTo(B) * 0.18;                    // farther legs arc higher
+        const mid = A.clone().add(B).multiplyScalar(0.5).normalize().multiplyScalar(lift);
+        const curve = new THREE.QuadraticBezierCurve3(A, mid, B);
+        // A thin glowing tube (Line width is capped at 1px on most GPUs, so a tube
+        // reads far better as an arc across the planet).
+        const tube = new THREE.Mesh(
+          new THREE.TubeGeometry(curve, 60, 0.006, 8, false),
+          new THREE.MeshBasicMaterial({ color: 0xffc76a, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false }),
+        );
+        globe.add(tube);
+        const trav = new THREE.Mesh(new THREE.SphereGeometry(0.014, 8, 8),
+          new THREE.MeshBasicMaterial({ color: 0xfff2cf }));
+        globe.add(trav);
+        travellers.push({ curve, mesh: trav, t: Math.random() });
       }
 
       controls = new OrbitControls(camera, renderer.domElement);
@@ -258,7 +286,8 @@ export default function WinePassport({ onBack, userId, onWineClick }) {
         const localHit = globe.worldToLocal(hit.point.clone()).normalize();
         const [lng, lat] = toLatLng(localHit);
         const feat = land.features.find(f => inFeature(lng, lat, f.geometry));
-        if (!feat) { setSelected(null); paint(null); return; }
+        // Tapped open ocean → clear the selection and gently zoom back out.
+        if (!feat) { setSelected(null); paint(null); focusTarget = camera.position.clone().normalize().multiplyScalar(3.0); return; }
         const cc = canon(feat.properties.name);
         paint(cc);
         focusTarget = hit.point.clone().normalize().multiplyScalar(1.9);
@@ -279,9 +308,14 @@ export default function WinePassport({ onBack, userId, onWineClick }) {
 
       const animate = () => {
         frame = requestAnimationFrame(animate);
+        const now = performance.now() / 1000;
         if (focusTarget) { camera.position.lerp(focusTarget, 0.08); if (camera.position.distanceTo(focusTarget) < 0.02) focusTarget = null; }
         sun.position.copy(camera.position);        // keep the face you're looking at lit
         stars.rotation.y += 0.0004;                // very slow drift for a touch of life
+        // Pulse the pin halos.
+        for (const h of pulseHalos) { const s = 1 + 0.35 * (0.5 + 0.5 * Math.sin(now * 2.2 + h.userData.phase)); h.scale.setScalar(s); h.material.opacity = 0.18 + 0.22 * (0.5 + 0.5 * Math.sin(now * 2.2 + h.userData.phase)); }
+        // Fly the travellers along each journey arc.
+        for (const tr of travellers) { tr.t = (tr.t + 0.0045) % 1; tr.mesh.position.copy(tr.curve.getPoint(tr.t)); }
         controls.update(); renderer.render(scene, camera);
       };
       animate();
@@ -326,7 +360,7 @@ export default function WinePassport({ onBack, userId, onWineClick }) {
       <button className="back-btn" onClick={onBack}>← Back</button>
       <div className="passport-hero">
         <h1><span className="ph-icon">{GlobeIcon}</span> Wine Passport</h1>
-        <p>Tap a country, then a region, to revisit your wines.</p>
+        <p>Spin the globe — the gold trail is your tasting journey. Tap a country, then a region, to revisit your wines.</p>
       </div>
 
       <div className="passport-stats">
