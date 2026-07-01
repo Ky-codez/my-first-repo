@@ -240,6 +240,59 @@ router.get('/api/wines/trending', (req, res) => {
   res.json(wines.map(w => ({ ...w, trend_window: trendWindow })));
 });
 
+// ─── What's Hot (public leaderboard) ─────────────────────────────────────────
+// PUBLIC, no auth — meant to be shared in wine forums / social. Ranks BOTTLES
+// (a bottle = same name + winery, however many people logged it) by how many
+// times the community logged them in the window. This is the "logged N times
+// this week" metric — distinct from /trending, which ranks single review posts
+// by likes+comments. Only public wines from public accounts are counted
+// (viewerId is forced to 0 — a logged-out viewer — so nothing private leaks).
+router.get('/api/wines/hot', (req, res) => {
+  // A logged-out visitor only ever sees public wines from public accounts.
+  // Written per-alias (rather than reusing visibleWinesNoJoin) because the
+  // like-count subquery joins `likes` — which ALSO has a user_id column — so
+  // bare column names would be ambiguous.
+  const pub = (a) => `${a}.is_private = 0 AND ${a}.user_id NOT IN (SELECT id FROM users WHERE is_private = 1)`;
+
+  // One bottle = LOWER(name) + LOWER(winery). We aggregate the log entries and
+  // pull a representative photo + all-time like tally via correlated subqueries
+  // (kept out of the GROUP BY so AVG(rating) stays honest).
+  const bottleQuery = (windowClause) => `
+    SELECT
+      w.name, w.winery, w.type,
+      COUNT(*)                    AS log_count,
+      COUNT(DISTINCT w.user_id)   AS taster_count,
+      ROUND(AVG(w.rating), 1)     AS avg_rating,
+      MAX(w.is_biodynamic)        AS is_biodynamic,
+      MAX(w.is_organic)           AS is_organic,
+      MAX(w.created_at)           AS last_logged,
+      (SELECT w2.image_path FROM wines w2
+         WHERE w2.name = w.name AND IFNULL(w2.winery,'') = IFNULL(w.winery,'')
+           AND w2.image_path IS NOT NULL AND ${pub('w2')}
+         ORDER BY w2.created_at DESC LIMIT 1) AS image_path,
+      (SELECT COUNT(*) FROM likes l JOIN wines w3 ON l.wine_id = w3.id
+         WHERE w3.name = w.name AND IFNULL(w3.winery,'') = IFNULL(w.winery,'')
+           AND ${pub('w3')}) AS like_count
+    FROM wines w
+    WHERE ${pub('w')} ${windowClause}
+    GROUP BY LOWER(w.name), LOWER(IFNULL(w.winery,''))
+    HAVING log_count > 0
+    ORDER BY log_count DESC, avg_rating DESC, taster_count DESC, last_logged DESC
+    LIMIT 24
+  `;
+
+  let window = 'week';
+  let bottles = db.prepare(bottleQuery(`AND w.created_at >= datetime('now', '-7 days')`)).all();
+
+  // Not enough activity this week → widen to all-time so the page is never empty.
+  if (bottles.length < 5) {
+    window = 'all';
+    bottles = db.prepare(bottleQuery('')).all();
+  }
+
+  res.json({ window, bottles: bottles.map((b, i) => ({ ...b, rank: i + 1 })) });
+});
+
 // Bottle page — all reviews of the same wine (matched by name + winery)
 router.get('/api/wines/bottle', (req, res) => {
   const { name, winery } = req.query;

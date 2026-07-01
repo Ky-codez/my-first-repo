@@ -10,6 +10,24 @@ A running log of fixes and new features. Newest at the top. Times are TST (UTC+8
 
 ---
 
+## 2026-07-01 — What's Hot (public trending leaderboard)
+
+- **"What's Hot" page** — a public, no-login leaderboard of the wines the
+  community is logging most **this week** ("Logged 4× this week"). Ranks whole
+  *bottles* (everyone who logged the same wine), not single posts — so it
+  answers "what's everyone drinking right now?" Top three get gold/silver/bronze
+  medals; each row shows the average rating, how many people tasted it, likes,
+  and a natural-wine leaf. Falls back to an all-time board when a week is quiet.
+- **Shareable at `/trending`** — built for dropping into wine forums, Reddit and
+  Discord. Logged-out visitors browse freely; tapping a bottle nudges them to
+  create a free account. Creates FOMO + discovery, and every link is a doorway
+  into the app.
+- **In-app entry** — a "What's Hot" banner on the Discover tab opens the same
+  board, where tapping a bottle drills into its community page.
+- Backend: new public `GET /api/wines/hot` aggregates visible logs by bottle
+  (name + winery), counts this-week logs, and returns a ranked board. Only
+  public wines from public accounts are ever counted.
+
 ## 2026-06-25 — Natural-wine filter
 
 - **"Natural only" filter** on the feed — a one-tap chip that narrows Explore /

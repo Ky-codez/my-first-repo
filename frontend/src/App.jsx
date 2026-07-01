@@ -23,6 +23,7 @@ import AgeGate         from './components/AgeGate.jsx';
 const AddWine         = lazy(() => import('./components/AddWine.jsx'));
 const Profile         = lazy(() => import('./components/Profile.jsx'));
 const PublicProfile   = lazy(() => import('./components/PublicProfile.jsx'));
+const WhatsHot        = lazy(() => import('./components/WhatsHot.jsx'));
 const LunarCalendar   = lazy(() => import('./components/LunarCalendar.jsx'));
 const WhatsNew        = lazy(() => import('./components/WhatsNew.jsx'));
 const WinePage        = lazy(() => import('./components/WinePage.jsx'));
@@ -64,6 +65,12 @@ function getLegalPage() {
   if (p === '/terms')   return 'terms';
   if (p === '/privacy') return 'privacy';
   return null;
+}
+
+// Public "What's Hot" leaderboard — shareable in wine forums, no login needed.
+function isHotPage() {
+  const p = window.location.pathname.replace(/\/$/, '');
+  return p === '/trending' || p === '/hot';
 }
 
 // Password-reset deep link: /reset-password?token=… — readable without login.
@@ -238,6 +245,21 @@ export default function App() {
     );
   }
 
+  // Public "What's Hot" leaderboard at /trending — no login required. Logged-in
+  // visitors can drill into a bottle; logged-out visitors get a sign-up nudge.
+  if (isHotPage()) {
+    return (
+      <Suspense fallback={<ViewLoader />}>
+        <WhatsHot
+          currentUser={currentUser}
+          onWineClick={currentUser ? openWinePage : undefined}
+          onLogin={() => { window.history.replaceState({}, '', '/'); setView('feed'); }}
+          onBack={currentUser ? () => { window.history.replaceState({}, '', '/'); setView('feed'); } : undefined}
+        />
+      </Suspense>
+    );
+  }
+
   // Public share page — no login required
   if (view === 'public-share' && shareTarget) {
     return (
@@ -352,6 +374,15 @@ export default function App() {
           onUserClick={openProfile}
           onWineClick={openWinePage}
           onWineryClick={openWineryPage}
+          onWhatsHotClick={() => setView('whatshot')}
+        />
+      )}
+
+      {view === 'whatshot' && (
+        <WhatsHot
+          currentUser={currentUser}
+          onWineClick={openWinePage}
+          onBack={() => setView('vibes')}
         />
       )}
 

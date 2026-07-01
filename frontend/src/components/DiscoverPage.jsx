@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import WineCard from './WineCard.jsx';
 import SkeletonCard from './SkeletonCard.jsx';
 import TrendingCoverflow from './TrendingCoverflow.jsx';
-import { Wine, Couch, Confetti, Heart, SunHorizon, Diamond, DiceFive, MagnifyingGlass, MapPin, Sparkle, Star, Plant } from '@phosphor-icons/react';
+import { Wine, Couch, Confetti, Heart, SunHorizon, Diamond, DiceFive, MagnifyingGlass, MapPin, Sparkle, Star, Plant, Fire, CaretRight } from '@phosphor-icons/react';
 import { WineTypeIcon } from './wineIcons.jsx';
 
 const API = '';
@@ -43,7 +43,7 @@ function EmojiBurst({ burstId }) {
   );
 }
 
-export default function DiscoverPage({ currentUser, onUserClick, onWineClick, onWineryClick }) {
+export default function DiscoverPage({ currentUser, onUserClick, onWineClick, onWineryClick, onWhatsHotClick }) {
   // ── Search state ──
   const [query,   setQuery]   = useState('');
   const [results, setResults] = useState(EMPTY);
@@ -257,6 +257,18 @@ export default function DiscoverPage({ currentUser, onUserClick, onWineClick, on
                 </>
               )}
             </div>
+          )}
+
+          {/* What's Hot — full community leaderboard (most-logged bottles) */}
+          {onWhatsHotClick && (
+            <button className="whats-hot-banner" onClick={onWhatsHotClick}>
+              <span className="whb-icon"><Fire size={22} weight="fill" color="#e0651d" /></span>
+              <span className="whb-text">
+                <span className="whb-title">What's Hot</span>
+                <span className="whb-sub">See the wines everyone's logging this week</span>
+              </span>
+              <CaretRight size={18} weight="bold" className="whb-caret" />
+            </button>
           )}
 
           {/* Trending this week */}
