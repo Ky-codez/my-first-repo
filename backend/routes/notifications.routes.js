@@ -13,7 +13,7 @@ const router = express.Router();
 
 router.get('/api/notifications', requireAuth, (req, res) => {
   const rows = db.prepare(`
-    SELECT n.*, u.username AS actor_username, u.avatar_path AS actor_avatar
+    SELECT n.*, u.username AS actor_username, u.avatar_path AS actor_avatar, u.is_ambassador AS actor_is_ambassador
     FROM notifications n
     JOIN users u ON n.actor_id = u.id
     WHERE n.user_id = ?

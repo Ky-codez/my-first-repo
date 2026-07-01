@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { Lock, Fire } from '@phosphor-icons/react';
 
 const API = '';
 
@@ -62,7 +63,7 @@ function HoloCard({ badge }) {
     >
       <div className="holo-sheen" />
       <span className="holo-rarity">{badge.rarity}</span>
-      <span className="holo-emoji">{badge.earned ? badge.emoji : '🔒'}</span>
+      <span className="holo-emoji">{badge.earned ? badge.emoji : <Lock size={32} weight="fill" />}</span>
       <span className="holo-name">{badge.name}</span>
       <span className="holo-desc">{badge.desc}</span>
       {!badge.earned && badge.progress && (
@@ -98,7 +99,7 @@ export default function BadgeWall({ userId }) {
         <span className="bw-count">{data.earnedCount}<span className="bw-count-total">/{data.totalCount}</span> collected</span>
         {data.streak > 0 && (
           <span className="bw-streak" title="Weeks in a row with at least one log">
-            🔥 {data.streak}-week streak
+            <Fire size={14} weight="fill" style={{ verticalAlign: '-0.12em' }} /> {data.streak}-week streak
           </span>
         )}
       </div>

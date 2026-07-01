@@ -87,16 +87,16 @@ export default function ShareModal({ wine, onClose }) {
 
   const isMobile = canNativeShare();
   const btnLabel = status === 'rendering'
-    ? '⏳ Rendering…'
+    ? 'Rendering…'
     : status === 'done'
-    ? '✅ Shared!'
-    : isMobile ? '📤 Share Image' : '📥 Download Image';
+    ? 'Shared!'
+    : isMobile ? 'Share Image' : 'Download Image';
 
   return (
     <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="modal share-modal">
         <div className="modal-header">
-          <h2>📤 Share Wine</h2>
+          <h2>Share Wine</h2>
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
 
@@ -119,7 +119,7 @@ export default function ShareModal({ wine, onClose }) {
             {btnLabel}
           </button>
           <button className="btn-secondary share-link-btn" onClick={copyLink}>
-            {status === 'copied' ? '✅ Copied!' : '🔗 Copy Link'}
+            {status === 'copied' ? 'Copied!' : 'Copy Link'}
           </button>
         </div>
       </div>

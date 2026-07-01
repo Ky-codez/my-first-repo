@@ -6,6 +6,9 @@ import BadgeWall from './BadgeWall.jsx';
 import TasteMatch from './TasteMatch.jsx';
 import { useLang } from '../i18n.jsx';
 import { shareUrl } from '../utils/site.js';
+import { MapPin, Calendar, Star, Plant, Camera, PencilSimple, ArrowsClockwise, CheckCircle, Heart, Repeat, Champagne } from '@phosphor-icons/react';
+import { WineTypeIcon } from './wineIcons.jsx';
+import AmbassadorBadge from './AmbassadorBadge.jsx';
 import RecapCard from './RecapCard.jsx';
 
 const API = '';
@@ -13,7 +16,7 @@ const API = '';
 const TASTE_TYPES  = ['Red','White','Rosé','Sparkling','Champagne','Dessert','Fortified','Spirit'];
 const TASTE_GRAPES = ['Pinot Noir','Chardonnay','Cabernet Sauvignon','Merlot','Sauvignon Blanc','Riesling','Syrah','Grenache','Malbec','Tempranillo','Zinfandel','Viognier'];
 
-export default function Profile({ userId, currentUser, onBack, onRelog, onUserClick, onWineClick, onLogout, onWineryClick, theme, onThemeChange, onLunarClick, onCellarClick, onUserUpdate }) {
+export default function Profile({ userId, currentUser, onBack, onRelog, onUserClick, onWineClick, onLogout, onWineryClick, theme, onThemeChange, onLunarClick, onWhatsNewClick, onCellarClick, onPassportClick, onUserUpdate }) {
   const [user,         setUser]         = useState(null);
   const [wines,        setWines]        = useState([]);
   const [loading,      setLoading]      = useState(true);
@@ -29,7 +32,9 @@ export default function Profile({ userId, currentUser, onBack, onRelog, onUserCl
   const { t } = useLang();
   const isOwn = currentUser?.id === userId;
   const [following, setFollowing] = useState(false);
+  const [requested, setRequested] = useState(false);   // pending follow request (private accounts)
   const [followerCount, setFollowerCount] = useState(0);
+  const [followRequests, setFollowRequests] = useState([]);  // incoming requests (own profile)
 
   // Profile tab: 'wines' | 'activity'
   const [profileTab,   setProfileTab]   = useState('wines');
@@ -78,19 +83,24 @@ export default function Profile({ userId, currentUser, onBack, onRelog, onUserCl
     Promise.all(fetches).then(([u, w, tags]) => {
       setUser(u);
       setFollowing(u.isFollowing);
+      setRequested(!!u.hasRequested);
       setFollowerCount(u.followerCount || 0);
       setBioText(u.bio || '');
       setWines(w);
       if (tags) setTasteTags(tags.types ? tags : { types: [], grapes: [] });
       setLoading(false);
+      // Own profile with pending requests → load them for the inbox UI
+      if (isOwnProfile && u.pendingRequestCount > 0) {
+        fetch(`${API}/api/users/${userId}/follow-requests`)
+          .then(r => r.json())
+          .then(d => setFollowRequests(Array.isArray(d) ? d : []))
+          .catch(() => {});
+      }
     });
   }, [userId]);
 
   const toggleFollow = async () => {
-    const prev = { following, followerCount };
-    const next = !following;
-    setFollowing(next);
-    setFollowerCount(c => next ? c + 1 : c - 1);
+    const prev = { following, requested, followerCount };
     try {
       const res  = await fetch(`${API}/api/users/${userId}/follow`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -98,10 +108,39 @@ export default function Profile({ userId, currentUser, onBack, onRelog, onUserCl
       });
       const data = await res.json();
       setFollowing(data.following);
+      setRequested(!!data.requested);
       setFollowerCount(data.followerCount);
     } catch {
       setFollowing(prev.following);
+      setRequested(prev.requested);
       setFollowerCount(prev.followerCount);
+    }
+  };
+
+  // Owner accepts / declines an incoming follow request
+  const respondRequest = async (requesterId, accept) => {
+    setFollowRequests(rs => rs.filter(r => r.id !== requesterId));
+    if (accept) setFollowerCount(c => c + 1);
+    try {
+      await fetch(`${API}/api/users/${userId}/follow-requests/${requesterId}${accept ? '/accept' : ''}`, {
+        method: accept ? 'POST' : 'DELETE',
+      });
+    } catch { /* best-effort; list already updated optimistically */ }
+  };
+
+  // Toggle private account (own profile). Optimistic; reverts on failure.
+  const togglePrivate = async () => {
+    const next = !user?.isPrivate;
+    setUser(u => ({ ...u, isPrivate: next }));
+    try {
+      const token = localStorage.getItem('sipiary_token');
+      await fetch(`${API}/api/users/${userId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ is_private: next }),
+      });
+    } catch {
+      setUser(u => ({ ...u, isPrivate: !next }));
     }
   };
 
@@ -278,7 +317,7 @@ export default function Profile({ userId, currentUser, onBack, onRelog, onUserCl
     const url = shareUrl(`/?ref=${encodeURIComponent(currentUser.username)}`);
     if (navigator.share) {
       try {
-        await navigator.share({ title: 'Join me on Sipiary 🍷', text: `I'm tracking my wines on Sipiary — come join me!`, url });
+        await navigator.share({ title: 'Join me on Sipiary', text: `I'm tracking my wines on Sipiary — come join me!`, url });
         return;
       } catch { /* cancelled → fall through to copy */ }
     }
@@ -314,11 +353,13 @@ export default function Profile({ userId, currentUser, onBack, onRelog, onUserCl
       {isOwn && (
         <MainMenu
           theme={theme} onThemeChange={onThemeChange}
-          onLunarClick={onLunarClick} onCellarClick={onCellarClick}
+          onLunarClick={onLunarClick} onWhatsNewClick={onWhatsNewClick} onCellarClick={onCellarClick}
           onLogout={() => setShowSignOut(true)}
           onChangeUsername={() => setSubView('change-username')}
           onChangeEmail={() => setSubView('change-email')}
           onChangePassword={() => setSubView('change-password')}
+          onTogglePrivate={togglePrivate}
+          isPrivate={!!user?.isPrivate}
           currentUser={currentUser}
         />
       )}
@@ -368,7 +409,7 @@ export default function Profile({ userId, currentUser, onBack, onRelog, onUserCl
               {connWineries.map(w => (
                 <div key={w.name} className="fs-card">
                   <div className="fs-user">
-                    <span className="conn-winery-icon">🍾</span>
+                    <span className="conn-winery-icon"><Champagne size={18} weight="fill" /></span>
                     <span className="fs-info">
                       <span className="fs-name">{w.name}</span>
                       <span className="fs-meta">{w.post_count} {w.post_count === 1 ? 'post' : 'posts'}</span>
@@ -601,13 +642,14 @@ export default function Profile({ userId, currentUser, onBack, onRelog, onUserCl
   const bioCount = wines.filter(w => w.is_biodynamic).length;
   const bioPct   = wines.length ? Math.round((bioCount / wines.length) * 100) : 0;
 
+  const SI = { size: 20, weight: 'fill' };
   const stats = [
-    favGrape   && { icon: '🍇', label: 'Fav Grape',   value: favGrape },
-    favRegion  && { icon: '📍', label: 'Top Region',   value: favRegion },
-    activeMonth&& { icon: '📅', label: 'Most Active',  value: activeMonth },
-    favType    && { icon: '🍷', label: 'Top Style',    value: favType },
-    avgRatingGiven && { icon: '⭐', label: 'Avg Rating', value: `${avgRatingGiven} / 5` },
-    wines.length > 0 && { icon: '🌱', label: 'Biodynamic', value: `${bioPct}%` },
+    favGrape   && { icon: <WineTypeIcon type="Red" size={20} />, label: 'Fav Grape',   value: favGrape },
+    favRegion  && { icon: <MapPin {...SI} color="#c0392b" />,    label: 'Top Region',   value: favRegion },
+    activeMonth&& { icon: <Calendar {...SI} color="#4f86d6" />,  label: 'Most Active',  value: activeMonth },
+    favType    && { icon: <WineTypeIcon type={favType} size={20} />, label: 'Top Style', value: favType },
+    avgRatingGiven && { icon: <Star {...SI} color="#e0a020" />,  label: 'Avg Rating', value: `${avgRatingGiven} / 5` },
+    wines.length > 0 && { icon: <Plant {...SI} color="#5bb463" />, label: 'Biodynamic', value: `${bioPct}%` },
   ].filter(Boolean);
 
   return (
@@ -616,11 +658,14 @@ export default function Profile({ userId, currentUser, onBack, onRelog, onUserCl
         {isOwn && (
           <MainMenu
             theme={theme} onThemeChange={onThemeChange}
-            onLunarClick={onLunarClick} onCellarClick={onCellarClick}
+            onLunarClick={onLunarClick} onWhatsNewClick={onWhatsNewClick} onCellarClick={onCellarClick}
             onLogout={() => setShowSignOut(true)}
             onChangeUsername={() => setSubView('change-username')}
             onChangeEmail={() => setSubView('change-email')}
             onChangePassword={() => setSubView('change-password')}
+            onTogglePrivate={togglePrivate}
+            isPrivate={!!user?.isPrivate}
+            currentUser={currentUser}
           />
         )}
       </div>
@@ -631,7 +676,7 @@ export default function Profile({ userId, currentUser, onBack, onRelog, onUserCl
           {isOwn && (
             <>
               <button className="avatar-edit-btn" onClick={() => fileRef.current?.click()} disabled={uploading}>
-                {uploading ? '...' : '📷'}
+                {uploading ? '...' : <Camera size={18} weight="fill" />}
               </button>
               <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleAvatarChange} />
             </>
@@ -639,13 +684,13 @@ export default function Profile({ userId, currentUser, onBack, onRelog, onUserCl
         </div>
         <div className="profile-info">
           <div className="profile-name-row">
-            <h2>@{user.username}</h2>
+            <h2>@{user.username}{user.is_ambassador ? <AmbassadorBadge size={20} /> : null}</h2>
             {!isOwn && (
               <button
-                className={`follow-btn${following ? ' following' : ''}`}
+                className={`follow-btn${following ? ' following' : ''}${requested ? ' requested' : ''}`}
                 onClick={toggleFollow}
               >
-                {following ? '✓ Following' : '+ Follow'}
+                {following ? '✓ Following' : requested ? 'Requested' : '+ Follow'}
               </button>
             )}
           </div>
@@ -679,7 +724,7 @@ export default function Profile({ userId, currentUser, onBack, onRelog, onUserCl
               <div className="profile-bio-display" onClick={isOwn ? startBioEdit : undefined} title={isOwn ? 'Click to edit' : undefined}>
                 {user.bio
                   ? <p className="profile-bio-text">{user.bio}</p>
-                  : isOwn && <p className="profile-bio-placeholder">✏️ Add a short intro…</p>
+                  : isOwn && <p className="profile-bio-placeholder"><PencilSimple size={14} style={{ verticalAlign: '-0.12em' }} /> Add a short intro…</p>
                 }
               </div>
             )}
@@ -687,8 +732,29 @@ export default function Profile({ userId, currentUser, onBack, onRelog, onUserCl
         </div>
       </div>
 
-      {/* Taste Match — viewing someone else's profile */}
-      {!isOwn && currentUser && (
+      {/* Follow requests — own profile, private account with pending requests */}
+      {isOwn && followRequests.length > 0 && (
+        <div className="follow-requests">
+          <h3 className="profile-section-title" style={{ marginBottom: '0.6rem' }}>
+            Follow requests <span className="fr-count">{followRequests.length}</span>
+          </h3>
+          {followRequests.map(r => (
+            <div key={r.id} className="fr-row">
+              <button className="fr-user" onClick={() => onUserClick(r.id)}>
+                <Avatar user={r} size={40} />
+                <span className="fr-name">@{r.username}</span>
+              </button>
+              <div className="fr-actions">
+                <button className="fr-accept" onClick={() => respondRequest(r.id, true)}>Accept</button>
+                <button className="fr-decline" onClick={() => respondRequest(r.id, false)}>Decline</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Taste Match — viewing someone else's profile (hidden for private accounts) */}
+      {!isOwn && currentUser && !user.locked && (
         <TasteMatch currentUser={currentUser} otherUser={{ id: userId, username: user.username }} />
       )}
 
@@ -713,28 +779,44 @@ export default function Profile({ userId, currentUser, onBack, onRelog, onUserCl
         <div className="taste-profile-wrap">
           {!tasteProfile && !tasteLoading && (
             <button className="taste-profile-btn" onClick={fetchTasteProfile}>
-              🍷 Discover your taste profile
+              <WineTypeIcon type="Red" size={16} /> Discover your taste profile
             </button>
           )}
           {tasteLoading && (
             <div className="taste-profile-card loading">
-              <span className="taste-profile-spinner">⏳</span> Analysing your palate…
+              <span className="taste-profile-spinner"><ArrowsClockwise size={16} /></span> Analysing your palate…
             </div>
           )}
           {tasteProfile && !tasteLoading && (
             <div className="taste-profile-card">
-              <span className="taste-profile-icon">🍷</span>
+              <span className="taste-profile-icon"><WineTypeIcon type="Red" size={18} /></span>
               <p className="taste-profile-text">{tasteProfile}</p>
-              <button className="taste-profile-refresh" onClick={fetchTasteProfile} title="Regenerate">🔄</button>
+              <button className="taste-profile-refresh" onClick={fetchTasteProfile} title="Regenerate"><ArrowsClockwise size={16} /></button>
             </div>
           )}
         </div>
       )}
 
+      {/* Wine Passport — 3D globe of everywhere you've tasted from */}
+      {isOwn && (
+        <button className="passport-launch-btn" onClick={() => onPassportClick?.()}>
+          <span className="plb-globe" aria-hidden="true">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#c98fe0" strokeWidth="1.5" strokeLinecap="round">
+              <circle cx="12" cy="12" r="9" /><path d="M3 12h18" /><path d="M12 3a14 14 0 0 1 0 18a14 14 0 0 1 0-18" />
+            </svg>
+          </span>
+          <span className="plb-text">
+            <span className="plb-title">Wine Passport</span>
+            <span className="plb-sub">Spin the globe & explore your wine world</span>
+          </span>
+          <span className="plb-arrow">→</span>
+        </button>
+      )}
+
       {/* Your Wine Recap — shareable Spotify-Wrapped-style stats */}
       {isOwn && (
         <button className="recap-launch-btn" onClick={() => setShowRecap(true)}>
-          🍇 Your Wine Recap →
+          Your Wine Recap →
         </button>
       )}
 
@@ -742,11 +824,11 @@ export default function Profile({ userId, currentUser, onBack, onRelog, onUserCl
       {isOwn && (
         <div className="invite-friends-card">
           <div className="invite-friends-text">
-            <span className="invite-friends-title">🤝 Invite friends</span>
+            <span className="invite-friends-title">Invite friends</span>
             <span className="invite-friends-sub">Refer a friend who joins to unlock the <strong>Partner in Wine!</strong> badge</span>
           </div>
           <button className="invite-friends-btn" onClick={inviteFriends}>
-            {inviteCopied ? '✅ Link copied!' : 'Share invite'}
+            {inviteCopied ? <><CheckCircle size={15} weight="fill" style={{ verticalAlign: '-0.18em' }} /> Link copied!</> : 'Share invite'}
           </button>
         </div>
       )}
@@ -771,7 +853,7 @@ export default function Profile({ userId, currentUser, onBack, onRelog, onUserCl
                     key={t}
                     className={`taste-tags-option${tasteTags.types.includes(t) ? ' selected' : ''}`}
                     onClick={() => tasteTags.types.includes(t) ? removeTasteTag('type', t) : addTasteTag('type', t)}
-                  >🍷 {t}</button>
+                  ><WineTypeIcon type={t} size={14} /> {t}</button>
                 ))}
               </div>
               <p className="taste-tags-picker-label" style={{ marginTop: '0.5rem' }}>Grape varieties</p>
@@ -781,7 +863,7 @@ export default function Profile({ userId, currentUser, onBack, onRelog, onUserCl
                     key={g}
                     className={`taste-tags-option${tasteTags.grapes.includes(g) ? ' selected' : ''}`}
                     onClick={() => tasteTags.grapes.includes(g) ? removeTasteTag('grape', g) : addTasteTag('grape', g)}
-                  >🍇 {g}</button>
+                  >{g}</button>
                 ))}
               </div>
             </div>
@@ -794,10 +876,10 @@ export default function Profile({ userId, currentUser, onBack, onRelog, onUserCl
           {!tagPicker && (tasteTags.types.length > 0 || tasteTags.grapes.length > 0) && (
             <div className="conn-tag-wrap">
               {tasteTags.types.map(t => (
-                <span key={t} className="conn-tag">🍷 {t} <button className="conn-tag-x" onClick={() => removeTasteTag('type', t)}>×</button></span>
+                <span key={t} className="conn-tag"><WineTypeIcon type={t} size={13} /> {t} <button className="conn-tag-x" onClick={() => removeTasteTag('type', t)}>×</button></span>
               ))}
               {tasteTags.grapes.map(g => (
-                <span key={g} className="conn-tag">🍇 {g} <button className="conn-tag-x" onClick={() => removeTasteTag('grape', g)}>×</button></span>
+                <span key={g} className="conn-tag">{g} <button className="conn-tag-x" onClick={() => removeTasteTag('grape', g)}>×</button></span>
               ))}
             </div>
           )}
@@ -826,6 +908,22 @@ export default function Profile({ userId, currentUser, onBack, onRelog, onUserCl
         </div>
       )}
 
+      {/* Private account: non-owners see a locked panel instead of the content */}
+      {user.locked ? (
+        <div className="profile-locked">
+          <svg className="profile-locked-icon" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <rect x="3" y="11" width="18" height="11" rx="2" />
+            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+          </svg>
+          <p className="profile-locked-title">This account is private</p>
+          <p className="profile-locked-sub">
+            {requested
+              ? `Your follow request is pending. You'll see @${user.username}'s wines once they accept.`
+              : `Follow @${user.username} to see their wines — they'll need to approve your request.`}
+          </p>
+        </div>
+      ) : (
+      <>
       {/* Tab bar */}
       <div className="profile-tabs">
         <button className={`profile-tab${profileTab === 'wines' ? ' active' : ''}`} onClick={() => setProfileTab('wines')}>
@@ -873,7 +971,7 @@ export default function Profile({ userId, currentUser, onBack, onRelog, onUserCl
           {(activity || []).map((w, i) => (
             <div key={`${w.activity_type}-${w.id}-${i}`} className="activity-item">
               <div className="activity-label">
-                {w.activity_type === 'liked' ? '❤️ You liked' : '🔁 You reposted'}
+                {w.activity_type === 'liked' ? <><Heart size={13} weight="fill" style={{ verticalAlign: '-0.12em' }} /> You liked</> : <><Repeat size={13} weight="bold" style={{ verticalAlign: '-0.12em' }} /> You reposted</>}
               </div>
               <WineCard wine={w} currentUser={currentUser} onDelete={() => {}} onRelog={onRelog} onUserClick={onUserClick} onWineClick={onWineClick} />
             </div>
@@ -883,6 +981,8 @@ export default function Profile({ userId, currentUser, onBack, onRelog, onUserCl
 
       {/* Badges tab — collectible holo cards */}
       {profileTab === 'badges' && <BadgeWall userId={userId} />}
+      </>
+      )}
     </div>
   );
 }

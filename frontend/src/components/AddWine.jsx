@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import TastingNotes, { parseSAT } from './TastingNotes.jsx';
 import { useLang } from '../i18n.jsx';
 import PourRating from './PourRating.jsx';
@@ -9,27 +9,29 @@ import RegionTagInput from './RegionTagInput.jsx';
 import SingleTagInput from './SingleTagInput.jsx';
 import ShareModal from './ShareModal.jsx';
 import { getMoonInfo, TYPE_INFO, PHASE_INFO } from '../utils/moonCalendar.js';
+import { Wine, Champagne, Circle, Camera, Lightning, GraduationCap, Plant, Leaf, Lock, Globe, Trash, Confetti, ForkKnife, Smiley } from '@phosphor-icons/react';
+import { WineTypeIcon, MoodIcon } from './wineIcons.jsx';
 
 const API = '';
 const WINE_TYPES = [
-  { label: 'Red',       emoji: '🍷', color: '#c0392b', bg: '#c0392b22' },
-  { label: 'White',     emoji: '🥂', color: '#d4a017', bg: '#d4a01722' },
-  { label: 'Rosé',      emoji: '🌸', color: '#e91e8c', bg: '#e91e8c22' },
-  { label: 'Sparkling', emoji: '✨', color: '#42a5f5', bg: '#42a5f522' },
-  { label: 'Champagne', emoji: '🍾', color: '#d4af37', bg: '#d4af3722' },
-  { label: 'Dessert',   emoji: '🍯', color: '#e67e22', bg: '#e67e2222' },
-  { label: 'Fortified', emoji: '🏺', color: '#9b59b6', bg: '#9b59b622' },
-  { label: 'Spirit',    emoji: '🥃', color: '#8d6e63', bg: '#8d6e6322' },
+  { label: 'Red',       color: '#c0392b', bg: '#c0392b22' },
+  { label: 'White',     color: '#d4a017', bg: '#d4a01722' },
+  { label: 'Rosé',      color: '#e91e8c', bg: '#e91e8c22' },
+  { label: 'Sparkling', color: '#42a5f5', bg: '#42a5f522' },
+  { label: 'Champagne', color: '#d4af37', bg: '#d4af3722' },
+  { label: 'Dessert',   color: '#e67e22', bg: '#e67e2222' },
+  { label: 'Fortified', color: '#9b59b6', bg: '#9b59b622' },
+  { label: 'Spirit',    color: '#8d6e63', bg: '#8d6e6322' },
 ];
 
 // Mood log — the whole rating boiled down to one tap on a face. For total
 // beginners who don't yet know grapes or regions: "how did it make you feel?"
 const MOODS = [
-  { key: 'love', emoji: '😍', label: 'Loved it',   rating: 5 },
-  { key: 'like', emoji: '😊', label: 'Liked it',   rating: 4 },
-  { key: 'ok',   emoji: '🙂', label: 'It was OK',  rating: 3 },
-  { key: 'meh',  emoji: '😕', label: 'Meh',        rating: 2 },
-  { key: 'nope', emoji: '😣', label: 'Not for me', rating: 1 },
+  { key: 'love', label: 'Loved it',   rating: 5 },
+  { key: 'like', label: 'Liked it',   rating: 4 },
+  { key: 'ok',   label: 'It was OK',  rating: 3 },
+  { key: 'meh',  label: 'Meh',        rating: 2 },
+  { key: 'nope', label: 'Not for me', rating: 1 },
 ];
 // Friendly fallback name when a beginner logs a mood without naming the wine.
 const moodName = (rating) => ({
@@ -97,6 +99,15 @@ export default function AddWine({ currentUser, onClose, onAdded, onWineClick, wi
   const [barcodeMsg, setBarcodeMsg] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  // "Tasted with" tags — array of { id, username }. Pre-filled when editing.
+  const [tagged, setTagged] = useState(() => {
+    const raw = editWine?.tagged_users;
+    if (!raw) return [];
+    return raw.split(',').map(t => { const [id, username] = t.split(':'); return { id: Number(id), username }; });
+  });
+  const [tagQuery,   setTagQuery]   = useState('');
+  const [tagResults, setTagResults] = useState([]);
+
   const todayStr = new Date().toISOString().slice(0, 10);
   const src = editWine ?? (prefill ? prefill : null);
   const [form, setForm] = useState({
@@ -121,6 +132,25 @@ export default function AddWine({ currentUser, onClose, onAdded, onWineClick, wi
   const openedPhase  = PHASE_INFO[openedMoon.phase];
 
   const set = (key, val) => setForm(f => ({ ...f, [key]: val }));
+
+  // "Tasted with" — debounced user search; excludes self and already-tagged.
+  useEffect(() => {
+    const q = tagQuery.trim();
+    if (q.length < 1) { setTagResults([]); return; }
+    const timer = setTimeout(async () => {
+      try {
+        const res  = await fetch(`${API}/api/users/taggable?q=${encodeURIComponent(q)}`);
+        const data = await res.json();
+        const taggedIds = new Set(tagged.map(u => u.id));
+        const list = Array.isArray(data) ? data : [];
+        setTagResults(list.filter(u => u.id !== currentUser?.id && !taggedIds.has(u.id)));
+      } catch { setTagResults([]); }
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [tagQuery, tagged, currentUser]);
+
+  const addTag = (u) => { setTagged(t => [...t, { id: u.id, username: u.username }]); setTagQuery(''); setTagResults([]); };
+  const removeTag = (id) => setTagged(t => t.filter(u => u.id !== id));
 
   const handleImageChange = (e) => {
     const file = e.target.files?.[0];
@@ -168,12 +198,12 @@ export default function AddWine({ currentUser, onClose, onAdded, onWineClick, wi
         if (c && [c.x, c.y, c.w, c.h].every(n => typeof n === 'number')) {
           setFocal({ x: c.x, y: c.y, w: c.w, h: c.h });
         }
-        setDetectMsg('✓ Wine detected! Review and confirm the fields below.');
+        setDetectMsg('Wine detected! Review and confirm the fields below.');
       } else {
-        setDetectMsg(data.reason ? `⚠️ ${data.reason}` : '⚠️ Could not detect details. Fill in manually.');
+        setDetectMsg(data.reason ? data.reason : 'Could not detect details. Fill in manually.');
       }
     } catch {
-      setDetectMsg('⚠️ Detection failed. Fill in manually.');
+      setDetectMsg('Detection failed. Fill in manually.');
     } finally {
       setDetecting(false);
     }
@@ -211,15 +241,15 @@ export default function AddWine({ currentUser, onClose, onAdded, onWineClick, wi
           winery: d.winery || f.winery,
           type:   WINE_TYPES.some(w => w.label === d.type) ? d.type : f.type,
         }));
-        setBarcodeMsg(`✓ Found: ${d.name || code}. Review fields below.`);
+        setBarcodeMsg(`Found: ${d.name || code}. Review fields below.`);
       } else {
-        setBarcodeMsg(`⚠️ Barcode ${code} not in database. Fill in manually.`);
+        setBarcodeMsg(`Barcode ${code} not in database. Fill in manually.`);
       }
     } catch (err) {
       if (err?.name === 'NotFoundException') {
-        setBarcodeMsg('⚠️ No barcode found in photo. Try again closer.');
+        setBarcodeMsg('No barcode found in photo. Try again closer.');
       } else {
-        setBarcodeMsg('⚠️ Scan failed. Fill in manually.');
+        setBarcodeMsg('Scan failed. Fill in manually.');
       }
     } finally {
       setBarcoding(false);
@@ -249,6 +279,8 @@ export default function AddWine({ currentUser, onClose, onAdded, onWineClick, wi
       fd.append('focal_h', focal.h);
     }
     if (!isEdit) fd.append('is_private', isPrivate ? '1' : '0');
+    // "Tasted with" tags — comma-separated user ids (always send so edits can clear)
+    fd.append('tagged', tagged.map(u => u.id).join(','));
 
     try {
       const url    = isEdit ? `${API}/api/wines/${editWine.id}` : `${API}/api/wines`;
@@ -292,8 +324,8 @@ export default function AddWine({ currentUser, onClose, onAdded, onWineClick, wi
         <div className="modal">
           {/* Cork pop! Plays once when the success screen mounts */}
           <div className="cork-pop" aria-hidden="true">
-            <span className="cork-bottle">🍾</span>
-            <span className="cork-cork">🟤</span>
+            <span className="cork-bottle"><Champagne size={40} weight="fill" color="#c0392b" /></span>
+            <span className="cork-cork"><Circle size={14} weight="fill" color="#8d6e63" /></span>
             {Array.from({ length: 14 }, (_, i) => (
               <span
                 key={i}
@@ -309,7 +341,7 @@ export default function AddWine({ currentUser, onClose, onAdded, onWineClick, wi
             ))}
           </div>
           <div className="modal-header">
-            <h2>🍷 Wine Logged!</h2>
+            <h2><Wine size={22} weight="fill" color="#c0392b" style={{ verticalAlign: '-0.18em' }} /> Wine Logged!</h2>
             <button className="modal-close" onClick={onClose}>×</button>
           </div>
           <div className="wine-logged-success">
@@ -318,7 +350,7 @@ export default function AddWine({ currentUser, onClose, onAdded, onWineClick, wi
             {savedWine.newBadges?.length > 0 && (
               <div className="badge-unlock">
                 <p className="badge-unlock-title">
-                  🎉 {savedWine.newBadges.length === 1 ? 'Badge unlocked!' : `${savedWine.newBadges.length} badges unlocked!`}
+                  <Confetti size={16} weight="fill" style={{ verticalAlign: '-0.18em' }} /> {savedWine.newBadges.length === 1 ? 'Badge unlocked!' : `${savedWine.newBadges.length} badges unlocked!`}
                 </p>
                 <div className="badge-unlock-list">
                   {savedWine.newBadges.map((b, i) => (
@@ -359,12 +391,12 @@ export default function AddWine({ currentUser, onClose, onAdded, onWineClick, wi
                 </button>
               </>
             ) : (
-              <p className="wls-first">You're the first to review this bottle! 🍾</p>
+              <p className="wls-first">You're the first to review this bottle! <Champagne size={15} weight="fill" style={{ verticalAlign: '-0.18em' }} /></p>
             )}
 
             {(pairings === 'loading' || pairings?.length > 0) && (
               <div className="wls-pairings">
-                <p className="wls-others-label">🍽️ Food pairings</p>
+                <p className="wls-others-label"><ForkKnife size={15} weight="fill" style={{ verticalAlign: '-0.18em' }} /> Food pairings</p>
                 {pairings === 'loading' ? (
                   <p className="wls-pairings-loading">Finding perfect matches…</p>
                 ) : (
@@ -382,7 +414,7 @@ export default function AddWine({ currentUser, onClose, onAdded, onWineClick, wi
               style={{ marginTop: '1rem', width: '100%' }}
               onClick={() => setSharing(true)}
             >
-              📲 Share to Stories
+              Share to Stories
             </button>
             <button className="btn-secondary" style={{ marginTop: '0.5rem', width: '100%' }} onClick={onClose}>Done</button>
           </div>
@@ -409,20 +441,20 @@ export default function AddWine({ currentUser, onClose, onAdded, onWineClick, wi
           {!isEdit && !isRelog && (
             <div className="aw-mode-toggle">
               <button type="button" className={`aw-mode-btn${mood ? ' active' : ''}`} onClick={() => setLogMode('mood')}>
-                😊 Mood
+                <Smiley size={16} weight="fill" style={{ verticalAlign: '-0.18em' }} /> Mood
               </button>
               <button type="button" className={`aw-mode-btn${quick ? ' active' : ''}`} onClick={() => setLogMode('quick')}>
-                ⚡ {t('addwine.quick')}
+                <Lightning size={16} weight="fill" style={{ verticalAlign: '-0.18em' }} /> {t('addwine.quick')}
               </button>
               <button type="button" className={`aw-mode-btn${full ? ' active' : ''}`} onClick={() => setLogMode('full')}>
-                🎓 {t('addwine.full')}
+                <GraduationCap size={16} weight="fill" style={{ verticalAlign: '-0.18em' }} /> {t('addwine.full')}
               </button>
             </div>
           )}
           {/* Re-log: compact read-only identity, all identity fields hidden */}
           {isRelog && (
             <div className="relog-identity">
-              <span className="relog-wine-name">🍷 {prefill.name}</span>
+              <span className="relog-wine-name"><WineTypeIcon type={prefill.type} size={16} /> {prefill.name}</span>
               {prefill.winery  && <span className="relog-winery">{prefill.winery}</span>}
               {prefill.vintage && <span className="relog-vintage">{prefill.vintage}</span>}
               {prefill.type    && <span className="relog-type">{prefill.type}</span>}
@@ -441,7 +473,7 @@ export default function AddWine({ currentUser, onClose, onAdded, onWineClick, wi
                     className={`mood-face${moodPicked && form.rating === m.rating ? ' picked' : ''}`}
                     onClick={() => { set('rating', m.rating); setMoodPicked(true); }}
                   >
-                    <span className="mood-emoji">{m.emoji}</span>
+                    <span className="mood-emoji"><MoodIcon mood={m.key} size={30} /></span>
                     <span className="mood-label">{m.label}</span>
                   </button>
                 ))}
@@ -453,7 +485,7 @@ export default function AddWine({ currentUser, onClose, onAdded, onWineClick, wi
               </div>
 
               <div className="mood-type-row">
-                {WINE_TYPES.filter(w => ['Red','White','Rosé','Sparkling'].includes(w.label)).map(({ label, emoji, color, bg }) => (
+                {WINE_TYPES.filter(w => ['Red','White','Rosé','Sparkling'].includes(w.label)).map(({ label, color, bg }) => (
                   <button
                     key={label}
                     type="button"
@@ -461,7 +493,7 @@ export default function AddWine({ currentUser, onClose, onAdded, onWineClick, wi
                     style={form.type === label ? { borderColor: color, background: bg, color } : {}}
                     onClick={() => set('type', label)}
                   >
-                    <span className="wtc-emoji">{emoji}</span>
+                    <span className="wtc-emoji"><WineTypeIcon type={label} size={22} /></span>
                     <span className="wtc-label">{label === 'Sparkling' ? 'Bubbly' : label}</span>
                   </button>
                 ))}
@@ -470,11 +502,11 @@ export default function AddWine({ currentUser, onClose, onAdded, onWineClick, wi
               {preview ? (
                 <div className="mood-photo">
                   <img src={preview} alt="" className="mood-photo-thumb" />
-                  <button type="button" className="upload-opt-btn" onClick={() => fileRef.current?.click()}>📷 Change photo</button>
+                  <button type="button" className="upload-opt-btn" onClick={() => fileRef.current?.click()}>Change photo</button>
                 </div>
               ) : (
                 <button type="button" className="upload-opt-btn mood-add-photo" onClick={() => fileRef.current?.click()}>
-                  📷 Add a photo (optional)
+                  Add a photo (optional)
                 </button>
               )}
             </div>
@@ -484,18 +516,18 @@ export default function AddWine({ currentUser, onClose, onAdded, onWineClick, wi
           {!isRelog && !mood && (!preview ? (
             <div className="image-upload-area">
               <div className="image-placeholder">
-                <span>📷</span>
+                <span><Camera size={30} /></span>
                 <p>Add a photo of your bottle</p>
               </div>
               <div className="image-upload-btns">
                 <button type="button" className="upload-opt-btn" onClick={() => fileRef.current?.click()}>
-                  📤 Upload Photo
+                  Upload Photo
                 </button>
                 <button type="button" className="upload-opt-btn scan" onClick={() => cameraRef.current?.click()}>
-                  📸 Scan Label
+                  Scan Label
                 </button>
                 <button type="button" className="upload-opt-btn barcode" onClick={() => barcodeRef.current?.click()} disabled={barcoding}>
-                  {barcoding ? '⏳' : '🔢'} Barcode
+                  {barcoding ? 'Reading…' : 'Barcode'}
                 </button>
               </div>
             </div>
@@ -504,13 +536,13 @@ export default function AddWine({ currentUser, onClose, onAdded, onWineClick, wi
               <PhotoAdjust src={preview} value={focal} onChange={setFocal} />
               <div className="image-upload-btns" style={{ marginTop: '0.4rem' }}>
                 <button type="button" className="upload-opt-btn" onClick={() => fileRef.current?.click()}>
-                  📤 Change Photo
+                  Change Photo
                 </button>
                 <button type="button" className="upload-opt-btn scan" onClick={() => cameraRef.current?.click()}>
-                  📸 Rescan
+                  Rescan
                 </button>
                 <button type="button" className="upload-opt-btn barcode" onClick={() => barcodeRef.current?.click()} disabled={barcoding}>
-                  {barcoding ? '⏳' : '🔢'} Barcode
+                  {barcoding ? 'Reading…' : 'Barcode'}
                 </button>
               </div>
             </>
@@ -521,18 +553,18 @@ export default function AddWine({ currentUser, onClose, onAdded, onWineClick, wi
 
           {!isRelog && !mood && imageFile && !detecting && (
             <button type="button" className="detect-btn" onClick={detectWine} disabled={detecting}>
-              🔍 Auto-detect wine details
+              Auto-detect wine details
             </button>
           )}
-          {!isRelog && !mood && detecting && <p className="detect-msg scanning">🔍 Scanning label…</p>}
+          {!isRelog && !mood && detecting && <p className="detect-msg scanning">Scanning label…</p>}
           {!isRelog && !mood && !detecting && detectMsg && <p className="detect-msg">{detectMsg}</p>}
-          {!isRelog && !mood && barcoding && <p className="detect-msg scanning">🔢 Reading barcode…</p>}
+          {!isRelog && !mood && barcoding && <p className="detect-msg scanning">Reading barcode…</p>}
           {!isRelog && !mood && !barcoding && barcodeMsg && <p className="detect-msg">{barcodeMsg}</p>}
 
           {/* Opening day picker with live lunar preview — auto-set to today in mood mode */}
           {!mood && <div className="form-field full">
             <div className="opened-label-row">
-              <label>📅 Date Opened *</label>
+              <label>Date Opened *</label>
               {form.opened_at && (
                 <div className="opened-moon-preview">
                   <span style={{ color: openedType.color }}>{openedType.emoji} {openedType.label}</span>
@@ -592,7 +624,7 @@ export default function AddWine({ currentUser, onClose, onAdded, onWineClick, wi
             <div className="form-field full">
               <label>Type</label>
               <div className="wine-type-picker">
-                {WINE_TYPES.map(({ label, emoji, color, bg }) => (
+                {WINE_TYPES.map(({ label, color, bg }) => (
                   <button
                     key={label}
                     type="button"
@@ -600,7 +632,7 @@ export default function AddWine({ currentUser, onClose, onAdded, onWineClick, wi
                     style={form.type === label ? { borderColor: color, background: bg, color } : {}}
                     onClick={() => set('type', label)}
                   >
-                    <span className="wtc-emoji">{emoji}</span>
+                    <span className="wtc-emoji"><WineTypeIcon type={label} size={22} /></span>
                     <span className="wtc-label">{label}</span>
                   </button>
                 ))}
@@ -616,7 +648,7 @@ export default function AddWine({ currentUser, onClose, onAdded, onWineClick, wi
           {quick && (form.winery || form.vintage || form.location || form.grapes) && (
             <button type="button" className="aw-detected-chip" onClick={() => setLogMode('full')}>
               <span className="aw-detected-text">
-                ✓ {[form.winery, form.vintage, form.location].filter(Boolean).join(' · ') || form.grapes}
+                {[form.winery, form.vintage, form.location].filter(Boolean).join(' · ') || form.grapes}
               </span>
               <span className="aw-detected-edit">{t('addwine.editDetails')}</span>
             </button>
@@ -628,14 +660,14 @@ export default function AddWine({ currentUser, onClose, onAdded, onWineClick, wi
               className={`toggle-chip biodynamic${form.is_biodynamic ? ' selected' : ''}`}
               onClick={() => set('is_biodynamic', !form.is_biodynamic)}
             >
-              🌱 Biodynamic
+              <Plant size={15} weight="fill" style={{ verticalAlign: '-0.18em' }} /> Biodynamic
             </button>
             <button
               type="button"
               className={`toggle-chip organic${form.is_organic ? ' selected' : ''}`}
               onClick={() => set('is_organic', !form.is_organic)}
             >
-              🌿 Organic
+              <Leaf size={15} weight="fill" style={{ verticalAlign: '-0.18em' }} /> Organic
             </button>
           </div>}
 
@@ -665,16 +697,50 @@ export default function AddWine({ currentUser, onClose, onAdded, onWineClick, wi
             <TastingNotes value={form.notes} onChange={v => set('notes', v)} wineType={form.type} />
           ))}
 
+          {/* Tasted with — tag the people you shared this wine with */}
+          {!mood && !isRelog && (
+            <div className="form-field full tasted-with">
+              <label>Tasted with</label>
+              {tagged.length > 0 && (
+                <div className="tw-chips">
+                  {tagged.map(u => (
+                    <span key={u.id} className="tw-chip">
+                      @{u.username}
+                      <button type="button" className="tw-chip-x" onClick={() => removeTag(u.id)} aria-label="Remove">×</button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <div className="tw-search">
+                <input
+                  type="text"
+                  placeholder="Search people to tag…"
+                  value={tagQuery}
+                  onChange={e => setTagQuery(e.target.value)}
+                />
+                {tagResults.length > 0 && (
+                  <div className="tw-results">
+                    {tagResults.map(u => (
+                      <button type="button" key={u.id} className="tw-result" onClick={() => addTag(u)}>
+                        @{u.username}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Privacy — new logs choose visibility; mood logs default to private */}
           {!isEdit && !isRelog && (
             <div className="form-field full">
               <label>Who can see this?</label>
               <div className="privacy-toggle">
                 <button type="button" className={`privacy-opt${isPrivate ? ' active' : ''}`} onClick={() => setIsPrivate(true)}>
-                  🔒 Private <span>only you</span>
+                  <Lock size={15} weight="fill" style={{ verticalAlign: '-0.18em' }} /> Private <span>only you</span>
                 </button>
                 <button type="button" className={`privacy-opt${!isPrivate ? ' active' : ''}`} onClick={() => setIsPrivate(false)}>
-                  🌍 Public <span>everyone</span>
+                  <Globe size={15} style={{ verticalAlign: '-0.18em' }} /> Public <span>everyone</span>
                 </button>
               </div>
             </div>
@@ -687,7 +753,7 @@ export default function AddWine({ currentUser, onClose, onAdded, onWineClick, wi
               {submitting ? 'Saving...'
                 : isEdit  ? t('addwine.saveChanges')
                 : isRelog ? t('addwine.relogBtn')
-                : mood    ? 'Log it 🍷'
+                : mood    ? 'Log it'
                 : quick   ? t('addwine.logIt')
                 : t('addwine.share')}
             </button>
@@ -705,7 +771,7 @@ export default function AddWine({ currentUser, onClose, onAdded, onWineClick, wi
               </div>
             ) : (
               <button type="button" className="aw-delete-btn" onClick={() => setConfirmDelete(true)}>
-                🗑 Delete this wine
+                <Trash size={15} style={{ verticalAlign: '-0.18em' }} /> Delete this wine
               </button>
             )
           )}

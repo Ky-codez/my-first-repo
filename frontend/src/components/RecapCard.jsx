@@ -5,6 +5,8 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import { shareUrl } from '../utils/site.js';
+import { MapPin, Star, MapTrifold, Plant, CheckCircle, DownloadSimple, ShareNetwork, ArrowsClockwise } from '@phosphor-icons/react';
+import { WineTypeIcon } from './wineIcons.jsx';
 
 const API = '';
 const canNativeShare = () => !!navigator.share && !!navigator.canShare;
@@ -16,16 +18,11 @@ const PERIODS = [
 ];
 const PERIOD_TITLE = { month: 'My Month in Wine', year: 'My Year in Wine', all: 'My Wine Journey' };
 
-const TYPE_EMOJI = {
-  Red: '🍷', White: '🥂', 'Rosé': '🌸', Sparkling: '✨',
-  Champagne: '🍾', Dessert: '🍯', Fortified: '🏺', Spirit: '🥃',
-};
-
-function Stat({ emoji, label, value, sub }) {
+function Stat({ icon, label, value, sub }) {
   if (!value) return null;
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid #2a1418' }}>
-      <span style={{ fontSize: 22, width: 28, textAlign: 'center' }}>{emoji}</span>
+      <span style={{ width: 28, textAlign: 'center', display: 'inline-flex', justifyContent: 'center' }}>{icon}</span>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 11, color: '#9a7a7a', textTransform: 'uppercase', letterSpacing: 1 }}>{label}</div>
         <div style={{ fontSize: 16, color: '#f5ece6', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -63,7 +60,7 @@ export default function RecapCard({ userId, username, onClose }) {
         const blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
         const file = new File([blob], filename, { type: 'image/png' });
         if (navigator.canShare({ files: [file] })) {
-          await navigator.share({ files: [file], title: 'My wine recap — Sipiary', text: `${PERIOD_TITLE[period]} 🍷 ${shareUrl('')}` });
+          await navigator.share({ files: [file], title: 'My wine recap — Sipiary', text: `${PERIOD_TITLE[period]} — ${shareUrl('')}` });
           setStatus('done'); setTimeout(() => setStatus(''), 2500); return;
         }
       }
@@ -84,7 +81,7 @@ export default function RecapCard({ userId, username, onClose }) {
     <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="modal recap-modal">
         <div className="modal-header">
-          <h2>🍷 Wine Recap</h2>
+          <h2><WineTypeIcon type="Red" size={20} /> Wine Recap</h2>
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
 
@@ -121,7 +118,7 @@ export default function RecapCard({ userId, username, onClose }) {
 
             {!loading && empty && (
               <p style={{ textAlign: 'center', color: '#b8946e', padding: '1.5rem 0', fontFamily: 'system-ui, sans-serif', lineHeight: 1.6 }}>
-                🍇 No wines logged this {period === 'all' ? 'period' : period} yet.<br />Log a bottle to start your recap!
+                No wines logged this {period === 'all' ? 'period' : period} yet.<br />Log a bottle to start your recap!
               </p>
             )}
 
@@ -136,19 +133,19 @@ export default function RecapCard({ userId, username, onClose }) {
 
                 <div style={{ fontFamily: 'system-ui, sans-serif' }}>
                   {data.topType && (
-                    <Stat emoji={TYPE_EMOJI[data.topType.name] || '🍷'} label="Top style"
+                    <Stat icon={<WineTypeIcon type={data.topType.name} size={22} />} label="Top style"
                           value={data.topType.name} sub={`· ${data.topType.count}×`} />
                   )}
-                  {data.topGrape && <Stat emoji="🍇" label="Favourite grape" value={data.topGrape.name} sub={`· ${data.topGrape.count}×`} />}
-                  {data.topRegion && <Stat emoji="📍" label="Top region" value={data.topRegion.name} />}
-                  {data.avgRating != null && <Stat emoji="⭐" label="Average rating" value={`${data.avgRating} / 5`} />}
-                  {data.uniqueGrapes > 0 && <Stat emoji="🗺️" label="Variety explored" value={`${data.uniqueGrapes} grape${data.uniqueGrapes === 1 ? '' : 's'} · ${data.uniqueRegions} region${data.uniqueRegions === 1 ? '' : 's'}`} />}
-                  {data.greenPct > 0 && <Stat emoji="🌱" label="Organic / biodynamic" value={`${data.greenPct}%`} />}
+                  {data.topGrape && <Stat icon={<WineTypeIcon type="Red" size={22} />} label="Favourite grape" value={data.topGrape.name} sub={`· ${data.topGrape.count}×`} />}
+                  {data.topRegion && <Stat icon={<MapPin size={22} weight="fill" color="#c0392b" />} label="Top region" value={data.topRegion.name} />}
+                  {data.avgRating != null && <Stat icon={<Star size={22} weight="fill" color="#e0a020" />} label="Average rating" value={`${data.avgRating} / 5`} />}
+                  {data.uniqueGrapes > 0 && <Stat icon={<MapTrifold size={22} weight="fill" color="#4f86d6" />} label="Variety explored" value={`${data.uniqueGrapes} grape${data.uniqueGrapes === 1 ? '' : 's'} · ${data.uniqueRegions} region${data.uniqueRegions === 1 ? '' : 's'}`} />}
+                  {data.greenPct > 0 && <Stat icon={<Plant size={22} weight="fill" color="#5bb463" />} label="Organic / biodynamic" value={`${data.greenPct}%`} />}
                 </div>
 
                 {data.highestRated && (
                   <div style={{ marginTop: 14, padding: '12px 14px', background: 'rgba(192,57,43,0.12)', border: '1px solid rgba(192,57,43,0.3)', borderRadius: 12, fontFamily: 'system-ui, sans-serif' }}>
-                    <div style={{ fontSize: 11, color: '#9a7a7a', textTransform: 'uppercase', letterSpacing: 1 }}>⭐ Top pour</div>
+                    <div style={{ fontSize: 11, color: '#9a7a7a', textTransform: 'uppercase', letterSpacing: 1 }}><Star size={12} weight="fill" color="#e0a020" style={{ verticalAlign: '-0.1em' }} /> Top pour</div>
                     <div style={{ fontSize: 15, fontWeight: 700, color: '#f5ece6', marginTop: 2 }}>
                       {data.highestRated.name} <span style={{ color: '#e67e22' }}>{data.highestRated.rating}★</span>
                     </div>
@@ -157,7 +154,7 @@ export default function RecapCard({ userId, username, onClose }) {
                 )}
 
                 <div style={{ marginTop: 18, display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontFamily: 'system-ui, sans-serif', borderTop: '1px solid #1e1010', paddingTop: 10 }}>
-                  <span style={{ fontSize: 13, color: '#c0392b', fontWeight: 700, letterSpacing: 2 }}>🍷 SIPIARY</span>
+                  <span style={{ fontSize: 13, color: '#c0392b', fontWeight: 700, letterSpacing: 2, display: 'inline-flex', alignItems: 'center', gap: 4 }}><WineTypeIcon type="Red" size={14} /> SIPIARY</span>
                   <span style={{ fontSize: 12, fontWeight: 700, color: '#e8c8a0', background: 'rgba(192,57,43,0.18)', border: '1px solid rgba(192,57,43,0.4)', borderRadius: 20, padding: '3px 12px' }}>sipiary.app</span>
                 </div>
               </>
@@ -168,7 +165,7 @@ export default function RecapCard({ userId, username, onClose }) {
         {!empty && (
           <div className="recap-actions">
             <button className="btn-primary" onClick={handleShare} disabled={status === 'rendering'}>
-              {status === 'rendering' ? '⏳ Rendering…' : status === 'done' ? '✅ Shared!' : (canNativeShare() ? '📲 Share recap' : '📥 Download recap')}
+              {status === 'rendering' ? <><ArrowsClockwise size={15} style={{ verticalAlign: '-0.15em' }} /> Rendering…</> : status === 'done' ? <><CheckCircle size={15} weight="fill" style={{ verticalAlign: '-0.15em' }} /> Shared!</> : (canNativeShare() ? <><ShareNetwork size={15} weight="fill" style={{ verticalAlign: '-0.15em' }} /> Share recap</> : <><DownloadSimple size={15} weight="fill" style={{ verticalAlign: '-0.15em' }} /> Download recap</>)}
             </button>
           </div>
         )}

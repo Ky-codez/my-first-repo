@@ -7,6 +7,8 @@
  * guide anytime via the 'open-install-guide' event.
  */
 import { useEffect, useState } from 'react';
+import { DeviceMobile } from '@phosphor-icons/react';
+import { WineTypeIcon } from './wineIcons.jsx';
 
 const isStandalone = () =>
   window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true;
@@ -55,7 +57,7 @@ export default function InstallGuide() {
     <>
       {banner && !open && (
         <div className="a2hs-banner">
-          <span className="a2hs-icon">📲</span>
+          <span className="a2hs-icon"><DeviceMobile size={22} weight="fill" /></span>
           <div className="a2hs-text">
             <strong>Add Sipiary to your home screen</strong>
             <span>Full-screen &amp; app-like — no browser bars.</span>
@@ -71,13 +73,13 @@ export default function InstallGuide() {
         <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && setOpen(false)}>
           <div className="modal a2hs-modal">
             <div className="modal-header">
-              <h2>📲 Add to Home Screen</h2>
+              <h2><DeviceMobile size={20} weight="fill" style={{ verticalAlign: '-0.18em' }} /> Add to Home Screen</h2>
               <button className="modal-close" onClick={() => setOpen(false)}>✕</button>
             </div>
             <div className="a2hs-body">
               <p className="a2hs-why">
                 Install Sipiary for the full-screen, app-like experience — it opens in
-                its own window with no browser address bar, so you get more room. 🍷
+                its own window with no browser address bar, so you get more room. <WineTypeIcon type="Red" size={14} />
               </p>
               {ios ? (
                 <ol className="a2hs-steps">
@@ -89,7 +91,7 @@ export default function InstallGuide() {
               ) : deferred ? (
                 <>
                   <p className="a2hs-why" style={{ marginBottom: '0.8rem' }}>Tap below, then confirm <strong>Install</strong>.</p>
-                  <button className="btn-primary" style={{ width: '100%' }} onClick={androidInstall}>📲 Install Sipiary</button>
+                  <button className="btn-primary" style={{ width: '100%' }} onClick={androidInstall}><DeviceMobile size={16} weight="fill" style={{ verticalAlign: '-0.18em' }} /> Install Sipiary</button>
                 </>
               ) : (
                 <ol className="a2hs-steps">

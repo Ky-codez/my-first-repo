@@ -17,6 +17,34 @@ const { getPalate, jaccard, matchScore } = require('../lib/tasteMatch');
 
 const router = express.Router();
 
+const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'ky_codez';
+
+// Admin-only: grant / revoke the Ambassador badge (gold star) for a username.
+// Body: { username, is_ambassador }. No self-serve — owner sets ambassadors.
+router.post('/api/admin/ambassador', requireAuth, (req, res) => {
+  if (req.user.username !== ADMIN_USERNAME) return res.status(403).json({ error: 'Admins only' });
+  const username = (req.body.username || '').trim();
+  if (!username) return res.status(400).json({ error: 'username required' });
+  const target = db.prepare('SELECT id FROM users WHERE LOWER(username) = LOWER(?)').get(username);
+  if (!target) return res.status(404).json({ error: 'No user with that username' });
+  const flag = req.body.is_ambassador ? 1 : 0;
+  db.prepare('UPDATE users SET is_ambassador = ? WHERE id = ?').run(flag, target.id);
+  res.json({ ok: true, username, is_ambassador: flag });
+});
+
+// Public profile by username — no auth required. Used for /@username public profiles.
+// NOTE: must stay ABOVE '/api/users/:id' or "profile/name" could be read as an id.
+router.get('/api/users/profile/:username', (req, res) => {
+  const user = db.prepare('SELECT * FROM users WHERE LOWER(username) = LOWER(?)').get(req.params.username);
+  if (!user) return res.status(404).json({ error: 'user not found' });
+  const wineCount = db.prepare('SELECT COUNT(*) as c FROM wines WHERE user_id = ? AND is_private = 0').get(user.id).c;
+  const followerCount = db.prepare('SELECT COUNT(*) as c FROM follows WHERE following_id = ?').get(user.id).c;
+  const followingCount = db.prepare('SELECT COUNT(*) as c FROM follows WHERE follower_id = ?').get(user.id).c;
+  // For public profiles, we always show locked status if the account is private (no viewer context)
+  const isPrivate = !!user.is_private;
+  res.json({ ...publicUser(user), wineCount, followerCount, followingCount, isPrivate, locked: isPrivate, total_reviews: wineCount });
+});
+
 // Who to follow — collaborative filtering ("3 Sancerre lovers follow them").
 // NOTE: must stay ABOVE '/api/users/:id' or "suggestions" is read as an id.
 router.get('/api/users/suggestions', (req, res) => {
@@ -53,7 +81,7 @@ router.get('/api/users/suggestions', (req, res) => {
 
       const placeholders = likeMe.map(() => '?').join(',');
       const rows = db.prepare(`
-        SELECT u.id, u.username, u.avatar_path,
+        SELECT u.id, u.username, u.avatar_path, u.is_ambassador,
                (SELECT COUNT(*) FROM wines   WHERE user_id=u.id) AS post_count,
                (SELECT COUNT(*) FROM follows WHERE following_id=u.id) AS follower_count,
                COUNT(*) AS signal
@@ -74,7 +102,7 @@ router.get('/api/users/suggestions', (req, res) => {
                     : `${shortVal} drinkers`;
         const reason = `${n} ${kind === 'location' ? shortVal + ' lover' + (n !== 1 ? 's' : '') : label} follow${n === 1 ? 's' : ''} them`;
         seen.add(r.id);
-        results.push({ id: r.id, username: r.username, avatar_path: r.avatar_path, post_count: r.post_count, follower_count: r.follower_count, reason });
+        results.push({ id: r.id, username: r.username, avatar_path: r.avatar_path, is_ambassador: r.is_ambassador, post_count: r.post_count, follower_count: r.follower_count, reason });
         if (results.length >= 5) break;
       }
     }
@@ -84,7 +112,7 @@ router.get('/api/users/suggestions', (req, res) => {
   if (results.length < 5) {
     const excludeIds = [...seen].map(Number).filter(Number.isFinite).join(',') || '0';
     const rows = db.prepare(`
-      SELECT u.id, u.username, u.avatar_path,
+      SELECT u.id, u.username, u.avatar_path, u.is_ambassador,
              (SELECT COUNT(*) FROM wines   WHERE user_id=u.id) AS post_count,
              (SELECT COUNT(*) FROM follows WHERE following_id=u.id) AS follower_count
       FROM users u
@@ -112,6 +140,23 @@ router.get('/api/users/suggestions', (req, res) => {
   res.json(results);
 });
 
+// Taggable users for "tasted with" — people you're allowed to tag: public
+// accounts, OR private accounts that have approved you (you follow them).
+// Must stay ABOVE '/api/users/:id'. Requires auth so we know who's asking.
+router.get('/api/users/taggable', requireAuth, (req, res) => {
+  const me = req.user.id;
+  const q = (req.query.q || '').trim();
+  if (!q) return res.json([]);
+  const rows = db.prepare(`
+    SELECT id, username, avatar_path, is_ambassador FROM users
+    WHERE username LIKE ? AND id != ?
+      AND (is_private = 0 OR id IN (SELECT following_id FROM follows WHERE follower_id = ?))
+    ORDER BY username
+    LIMIT 8
+  `).all(`%${q}%`, me, me);
+  res.json(rows);
+});
+
 // Public profile — counts + follow state. Secret columns stripped.
 router.get('/api/users/:id', (req, res) => {
   const { currentUserId } = req.query;
@@ -124,7 +169,20 @@ router.get('/api/users/:id', (req, res) => {
   const isFollowing = currentUserId
     ? !!db.prepare('SELECT 1 FROM follows WHERE follower_id = ? AND following_id = ?').get(currentUserId, req.params.id)
     : false;
-  res.json({ ...publicUser(user), wineCount, likesReceived, followerCount, followingCount, isFollowing });
+  // Private account: the profile is visible to the owner and to APPROVED
+  // followers. Everyone else sees the shell (name, avatar, bio, counts) with
+  // `locked` set, which tells the client to hide the wines and activity.
+  const isPrivate = !!user.is_private;
+  const viewerId  = Number(currentUserId) || 0;
+  const locked = isPrivate && viewerId !== user.id && !isFollowing;
+  const hasRequested = viewerId
+    ? !!db.prepare('SELECT 1 FROM follow_requests WHERE requester_id = ? AND target_id = ?').get(viewerId, user.id)
+    : false;
+  // Only the owner needs to know how many requests are waiting.
+  const pendingRequestCount = viewerId === user.id
+    ? db.prepare('SELECT COUNT(*) as c FROM follow_requests WHERE target_id = ?').get(user.id).c
+    : 0;
+  res.json({ ...publicUser(user), wineCount, likesReceived, followerCount, followingCount, isFollowing, isPrivate, locked, hasRequested, pendingRequestCount });
 });
 
 // Badges + weekly streak — computed live from the journal
@@ -331,22 +389,81 @@ router.get('/api/users/:id/activity', (req, res) => {
   res.json(merged);
 });
 
-// Follow / unfollow toggle — actor is always the token user
+// Follow / unfollow toggle — actor is always the token user.
+// Tapping the button cycles through the right state for the target:
+//   - already following  → unfollow
+//   - request pending    → cancel the request
+//   - private target     → create a follow REQUEST (awaits the owner's accept)
+//   - public target      → follow immediately
 router.post('/api/users/:id/follow', requireAuth, (req, res) => {
   const followerId  = req.user.id;
   const followingId = parseInt(req.params.id);
   if (!followingId || followerId === followingId) return res.status(400).json({ error: 'invalid' });
-  const existing = db.prepare('SELECT 1 FROM follows WHERE follower_id = ? AND following_id = ?').get(followerId, followingId);
-  if (existing) {
+
+  const target = db.prepare('SELECT id, is_private FROM users WHERE id = ?').get(followingId);
+  if (!target) return res.status(404).json({ error: 'not found' });
+
+  const isFollowing  = db.prepare('SELECT 1 FROM follows WHERE follower_id = ? AND following_id = ?').get(followerId, followingId);
+  const hasRequested = db.prepare('SELECT 1 FROM follow_requests WHERE requester_id = ? AND target_id = ?').get(followerId, followingId);
+  const followerCount = () => db.prepare('SELECT COUNT(*) as c FROM follows WHERE following_id = ?').get(followingId).c;
+
+  if (isFollowing) {
     db.prepare('DELETE FROM follows WHERE follower_id = ? AND following_id = ?').run(followerId, followingId);
     db.prepare("DELETE FROM notifications WHERE user_id=? AND actor_id=? AND type='follow'").run(followingId, followerId);
-  } else {
-    db.prepare('INSERT OR IGNORE INTO follows (follower_id, following_id) VALUES (?, ?)').run(followerId, followingId);
-    db.prepare('INSERT INTO notifications (user_id, actor_id, type) VALUES (?,?,?)').run(followingId, followerId, 'follow');
-    wsPush(followingId, 'notification', { type: 'follow' });
+    return res.json({ following: false, requested: false, followerCount: followerCount() });
   }
-  const followerCount = db.prepare('SELECT COUNT(*) as c FROM follows WHERE following_id = ?').get(followingId).c;
-  res.json({ following: !existing, followerCount });
+  if (hasRequested) {
+    db.prepare('DELETE FROM follow_requests WHERE requester_id = ? AND target_id = ?').run(followerId, followingId);
+    db.prepare("DELETE FROM notifications WHERE user_id=? AND actor_id=? AND type='follow_request'").run(followingId, followerId);
+    return res.json({ following: false, requested: false, followerCount: followerCount() });
+  }
+  if (target.is_private) {
+    db.prepare('INSERT OR IGNORE INTO follow_requests (requester_id, target_id) VALUES (?, ?)').run(followerId, followingId);
+    db.prepare('INSERT INTO notifications (user_id, actor_id, type) VALUES (?,?,?)').run(followingId, followerId, 'follow_request');
+    wsPush(followingId, 'notification', { type: 'follow_request' });
+    return res.json({ following: false, requested: true, followerCount: followerCount() });
+  }
+  db.prepare('INSERT OR IGNORE INTO follows (follower_id, following_id) VALUES (?, ?)').run(followerId, followingId);
+  db.prepare('INSERT INTO notifications (user_id, actor_id, type) VALUES (?,?,?)').run(followingId, followerId, 'follow');
+  wsPush(followingId, 'notification', { type: 'follow' });
+  return res.json({ following: true, requested: false, followerCount: followerCount() });
+});
+
+// List incoming follow requests (owner only)
+router.get('/api/users/:id/follow-requests', requireAuth, (req, res) => {
+  if (req.user.id !== parseInt(req.params.id)) return res.status(403).json({ error: 'Forbidden' });
+  const rows = db.prepare(`
+    SELECT u.id, u.username, u.avatar_path, fr.created_at
+    FROM follow_requests fr JOIN users u ON u.id = fr.requester_id
+    WHERE fr.target_id = ?
+    ORDER BY fr.created_at DESC
+  `).all(req.user.id);
+  res.json(rows);
+});
+
+// Accept a follow request → becomes a real follow; notify the requester
+router.post('/api/users/:id/follow-requests/:requesterId/accept', requireAuth, (req, res) => {
+  if (req.user.id !== parseInt(req.params.id)) return res.status(403).json({ error: 'Forbidden' });
+  const requesterId = parseInt(req.params.requesterId);
+  const pending = db.prepare('SELECT 1 FROM follow_requests WHERE requester_id = ? AND target_id = ?').get(requesterId, req.user.id);
+  if (!pending) return res.status(404).json({ error: 'no such request' });
+  db.transaction(() => {
+    db.prepare('INSERT OR IGNORE INTO follows (follower_id, following_id) VALUES (?, ?)').run(requesterId, req.user.id);
+    db.prepare('DELETE FROM follow_requests WHERE requester_id = ? AND target_id = ?').run(requesterId, req.user.id);
+    db.prepare("DELETE FROM notifications WHERE user_id=? AND actor_id=? AND type='follow_request'").run(req.user.id, requesterId);
+    db.prepare('INSERT INTO notifications (user_id, actor_id, type) VALUES (?,?,?)').run(requesterId, req.user.id, 'follow_accept');
+  })();
+  wsPush(requesterId, 'notification', { type: 'follow_accept' });
+  res.json({ ok: true });
+});
+
+// Decline / cancel a follow request
+router.delete('/api/users/:id/follow-requests/:requesterId', requireAuth, (req, res) => {
+  if (req.user.id !== parseInt(req.params.id)) return res.status(403).json({ error: 'Forbidden' });
+  const requesterId = parseInt(req.params.requesterId);
+  db.prepare('DELETE FROM follow_requests WHERE requester_id = ? AND target_id = ?').run(requesterId, req.user.id);
+  db.prepare("DELETE FROM notifications WHERE user_id=? AND actor_id=? AND type='follow_request'").run(req.user.id, requesterId);
+  res.json({ ok: true });
 });
 
 // AI taste profile (1–2 sentence palate summary)
@@ -423,12 +540,17 @@ router.get('/api/users/:id/taste-profile', async (req, res) => {
   }
 });
 
-// Update own bio
+// Update own bio and/or account privacy
 router.patch('/api/users/:id', requireAuth, (req, res) => {
   if (req.user.id !== parseInt(req.params.id)) return res.status(403).json({ error: 'Forbidden' });
-  const { bio } = req.body;
-  db.prepare('UPDATE users SET bio = ? WHERE id = ?').run(bio ?? null, req.user.id);
-  res.json(db.prepare('SELECT id, username, avatar_path, bio FROM users WHERE id = ?').get(req.user.id));
+  const { bio, is_private } = req.body;
+  if (bio !== undefined) db.prepare('UPDATE users SET bio = ? WHERE id = ?').run(bio ?? null, req.user.id);
+  if (is_private !== undefined) {
+    const flag = (is_private === true || is_private === 1 || is_private === '1') ? 1 : 0;
+    db.prepare('UPDATE users SET is_private = ? WHERE id = ?').run(flag, req.user.id);
+  }
+  const row = db.prepare('SELECT id, username, avatar_path, bio, is_private FROM users WHERE id = ?').get(req.user.id);
+  res.json({ ...row, isPrivate: !!row.is_private });
 });
 
 // Upload own avatar

@@ -164,6 +164,52 @@ try { db.exec(`ALTER TABLE likes ADD COLUMN created_at TEXT DEFAULT (datetime('n
 // Migrate: add is_private flag to wines
 try { db.exec(`ALTER TABLE wines ADD COLUMN is_private INTEGER NOT NULL DEFAULT 0`); } catch {}
 
+// Migrate: add is_private flag to users (private account — profile page is
+// owner-only and the user's wines are hidden from the main feed for others).
+try { db.exec(`ALTER TABLE users ADD COLUMN is_private INTEGER NOT NULL DEFAULT 0`); } catch {}
+
+// Migrate: ambassador flag — verified-style badge (gold star) shown next to the
+// username everywhere. Admin-set only (no self-serve); see admin ambassador route.
+try { db.exec(`ALTER TABLE users ADD COLUMN is_ambassador INTEGER NOT NULL DEFAULT 0`); } catch {}
+
+// Migrate: wine tags — people the logger tasted the wine WITH (Instagram-style
+// tagging). One row per (wine, tagged user).
+db.exec(`
+  CREATE TABLE IF NOT EXISTS wine_tags (
+    wine_id INTEGER NOT NULL REFERENCES wines(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    PRIMARY KEY (wine_id, user_id)
+  );
+`);
+
+// Migrate: user feedback / bug reports. Surfaced in the Founder Dashboard.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS feedback (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    type       TEXT NOT NULL DEFAULT 'other',
+    message    TEXT NOT NULL,
+    is_read    INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now'))
+  );
+`);
+
+// Migrate: feedback triage columns — flagged + completion status.
+try { db.exec(`ALTER TABLE feedback ADD COLUMN flagged INTEGER NOT NULL DEFAULT 0`); } catch {}
+try { db.exec(`ALTER TABLE feedback ADD COLUMN status TEXT NOT NULL DEFAULT 'new'`); } catch {}
+
+// Migrate: follow requests. Following a PRIVATE account creates a pending
+// request here instead of an immediate follows row; once the target accepts,
+// the request becomes a real follow (and is deleted from this table).
+db.exec(`
+  CREATE TABLE IF NOT EXISTS follow_requests (
+    requester_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    target_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at   TEXT DEFAULT (datetime('now')),
+    PRIMARY KEY (requester_id, target_id)
+  );
+`);
+
 // Migrate: swipes table for the Vibe Deck (Tinder-style discovery).
 // direction: 'right' = want to try, 'left' = pass. One row per user+wine.
 db.exec(`
@@ -209,5 +255,37 @@ db.exec(`CREATE INDEX IF NOT EXISTS idx_wines_user_slug ON wines(user_id, slug)`
   });
   backfill(missing);
 }
+
+// ── Performance indexes ──────────────────────────────────────────────────────
+// The feed/profile/notification queries fan out across these tables (COUNT
+// joins, privacy sub-selects, "who do I follow"). Without indexes SQLite does
+// full table scans per row; these turn the hot paths into index lookups.
+// All IF NOT EXISTS, so they're safe to (re)run on every boot.
+db.exec(`
+  CREATE INDEX IF NOT EXISTS idx_likes_wine        ON likes(wine_id);
+  CREATE INDEX IF NOT EXISTS idx_likes_wine_user   ON likes(wine_id, user_id);
+  CREATE INDEX IF NOT EXISTS idx_comments_wine     ON comments(wine_id);
+  CREATE INDEX IF NOT EXISTS idx_reposts_wine      ON reposts(wine_id);
+  CREATE INDEX IF NOT EXISTS idx_reposts_user      ON reposts(user_id);
+  CREATE INDEX IF NOT EXISTS idx_follows_follower  ON follows(follower_id);
+  CREATE INDEX IF NOT EXISTS idx_follows_following ON follows(following_id);
+  CREATE INDEX IF NOT EXISTS idx_notifs_user       ON notifications(user_id, is_read);
+  CREATE INDEX IF NOT EXISTS idx_notifs_actor      ON notifications(actor_id);
+  CREATE INDEX IF NOT EXISTS idx_wines_user        ON wines(user_id);
+  CREATE INDEX IF NOT EXISTS idx_wine_tags_wine    ON wine_tags(wine_id);
+  CREATE INDEX IF NOT EXISTS idx_cellar_user       ON cellar(user_id);
+  CREATE INDEX IF NOT EXISTS idx_winery_follows_user ON winery_follows(user_id);
+  CREATE INDEX IF NOT EXISTS idx_swipes_user       ON swipes(user_id);
+  CREATE INDEX IF NOT EXISTS idx_follow_req_target ON follow_requests(target_id);
+`);
+
+// SQLite runtime pragmas: WAL lets reads run concurrently with writes; the rest
+// trade a little durability headroom for noticeably snappier queries.
+try {
+  db.pragma('journal_mode = WAL');
+  db.pragma('synchronous = NORMAL');
+  db.pragma('temp_store = MEMORY');
+  db.pragma('cache_size = -16000'); // ~16 MB page cache
+} catch {}
 
 module.exports = db;

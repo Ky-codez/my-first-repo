@@ -5,6 +5,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { regionFlag, cleanLocation } from '../utils/regionFlags.js';
 import { wineShareUrl } from '../utils/site.js';
+import { Plant, Leaf } from '@phosphor-icons/react';
+import { WineTypeIcon } from './wineIcons.jsx';
 
 const API = '';
 
@@ -12,11 +14,6 @@ const TYPE_COLOR = {
   Red: '#c0392b', White: '#c9a227', 'Rosé': '#e91e8c',
   Sparkling: '#42a5f5', Champagne: '#d4af37', Dessert: '#e67e22',
   Fortified: '#9b59b6', Spirit: '#8d6e63',
-};
-const TYPE_EMOJI = {
-  Red: '🍷', White: '🥂', 'Rosé': '🌸',
-  Sparkling: '✨', Champagne: '🍾', Dessert: '🍯',
-  Fortified: '🏺', Spirit: '🥃',
 };
 
 // Canvas is 2x the display size for crispness.
@@ -83,17 +80,17 @@ function PhotoCanvas({ src, username }) {
       const x = W * 0.07 + 12;
       const maxW = W - x - pad;
       if (username) {
-        const combined = `reviewed by @${username}  ·  🍷 sipiary.app`;
+        const combined = `reviewed by @${username}  ·  sipiary.app`;
         if (ctx.measureText(combined).width <= maxW) {
           ctx.fillText(combined, x, H - pad);
         } else {
           ctx.fillText(`reviewed by @${username}`, x, H - pad - 32);
           ctx.font = '700 24px system-ui, sans-serif';
-          ctx.fillText('🍷 sipiary.app', x, H - pad);
+          ctx.fillText('sipiary.app', x, H - pad);
         }
       } else {
         ctx.font = '700 24px system-ui, sans-serif';
-        ctx.fillText('🍷 sipiary.app', x, H - pad);
+        ctx.fillText('sipiary.app', x, H - pad);
       }
 
       ctx.shadowColor = 'transparent';
@@ -126,7 +123,6 @@ export default function WineShareCard({ wine, forwardRef }) {
   const rf         = wine.location ? regionFlag(wine.location) : null;
   const displayLoc = wine.location ? (rf ? cleanLocation(wine.location) : wine.location) : null;
   const typeColor  = TYPE_COLOR[wine.type] || '#c0392b';
-  const typeEmoji  = TYPE_EMOJI[wine.type]  || '🍷';
   const imageUrl   = wine.image_path ? `${API}${wine.image_path}` : null;
   const grapes     = wine.grapes
     ? wine.grapes.split(/[,/]/).map(g => g.trim()).filter(Boolean).slice(0, 4)
@@ -171,9 +167,9 @@ export default function WineShareCard({ wine, forwardRef }) {
           : (
             <div style={{
               height: 320, display: 'flex', alignItems: 'center', justifyContent: 'center',
-              background: `${typeColor}18`, fontSize: 72,
+              background: `${typeColor}18`,
             }}>
-              {typeEmoji}
+              <WineTypeIcon type={wine.type} size={72} />
             </div>
           )
         }
@@ -189,7 +185,7 @@ export default function WineShareCard({ wine, forwardRef }) {
             color: typeColor, fontSize: 12,
             fontFamily: 'system-ui, sans-serif', fontWeight: 700, letterSpacing: 0.5,
           }}>
-            {typeEmoji} {wine.type}
+            <WineTypeIcon type={wine.type} size={13} color={typeColor} /> {wine.type}
           </div>
         </div>
 
@@ -236,12 +232,12 @@ export default function WineShareCard({ wine, forwardRef }) {
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', fontFamily: 'system-ui, sans-serif' }}>
             {!!wine.is_biodynamic && (
               <span style={{ background: '#1a3d1a55', border: '1px solid #4caf5066', color: '#81c784', borderRadius: 30, padding: '3px 12px', fontSize: 12 }}>
-                🌱 Biodynamic
+                <Plant size={12} weight="fill" style={{ verticalAlign: '-0.12em' }} /> Biodynamic
               </span>
             )}
             {!!wine.is_organic && (
               <span style={{ background: '#1a2f4a55', border: '1px solid #42a5f566', color: '#7ec8f7', borderRadius: 30, padding: '3px 12px', fontSize: 12 }}>
-                🌿 Organic
+                <Leaf size={12} weight="fill" style={{ verticalAlign: '-0.12em' }} /> Organic
               </span>
             )}
           </div>
@@ -263,7 +259,7 @@ export default function WineShareCard({ wine, forwardRef }) {
                  style={{ width: 62, height: 62, borderRadius: 8, flexShrink: 0, background: '#f5ece6', padding: 3 }} />
           )}
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 15, color: '#e07060', fontWeight: 800, letterSpacing: 2 }}>🍷 SIPIARY</div>
+            <div style={{ fontSize: 15, color: '#e07060', fontWeight: 800, letterSpacing: 2, display: 'flex', alignItems: 'center', gap: 5 }}><WineTypeIcon type="Red" size={15} /> SIPIARY</div>
             <div style={{ fontSize: 12, color: '#9a7a7a', marginTop: 2, lineHeight: 1.4 }}>
               Scan to taste it — track your wines, your way
             </div>

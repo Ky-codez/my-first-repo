@@ -1,17 +1,19 @@
 import { useState, useEffect } from 'react';
 import Avatar from './Avatar.jsx';
+import { Smiley, GraduationCap } from '@phosphor-icons/react';
+import { WineTypeIcon } from './wineIcons.jsx';
 
 const API = '';
 
 const WINE_TYPES = [
-  { label: 'Red',       emoji: '🍷', color: '#e74c3c', hint: 'Pinot Noir, Cabernet, Merlot' },
-  { label: 'White',     emoji: '🥂', color: '#f1c40f', hint: 'Chardonnay, Riesling, Sauvignon' },
-  { label: 'Rosé',      emoji: '🌸', color: '#e91e8c', hint: 'Provence, blush styles' },
-  { label: 'Sparkling', emoji: '✨', color: '#3498db', hint: 'Prosecco, Cava, Crémant' },
-  { label: 'Champagne', emoji: '🍾', color: '#d4af37', hint: 'The real deal, from Champagne' },
-  { label: 'Dessert',   emoji: '🍯', color: '#e67e22', hint: 'Sauternes, ice wine, Tokaji' },
-  { label: 'Fortified', emoji: '🏺', color: '#9b59b6', hint: 'Port, Sherry, Madeira' },
-  { label: 'Spirit',    emoji: '🥃', color: '#8d6e63', hint: 'Whisky, gin, rum, brandy' },
+  { label: 'Red',       color: '#e74c3c', hint: 'Pinot Noir, Cabernet, Merlot' },
+  { label: 'White',     color: '#f1c40f', hint: 'Chardonnay, Riesling, Sauvignon' },
+  { label: 'Rosé',      color: '#e91e8c', hint: 'Provence, blush styles' },
+  { label: 'Sparkling', color: '#3498db', hint: 'Prosecco, Cava, Crémant' },
+  { label: 'Champagne', color: '#d4af37', hint: 'The real deal, from Champagne' },
+  { label: 'Dessert',   color: '#e67e22', hint: 'Sauternes, ice wine, Tokaji' },
+  { label: 'Fortified', color: '#9b59b6', hint: 'Port, Sherry, Madeira' },
+  { label: 'Spirit',    color: '#8d6e63', hint: 'Whisky, gin, rum, brandy' },
 ];
 
 const GRAPES = [
@@ -25,10 +27,14 @@ const GRAPES = [
 // localStorage), so a beginner gets the 2-tap mood log while a student gets
 // the full WSET-style tasting sheet — without ever touching a settings page.
 const PERSONAS = [
-  { key: 'beginner',   emoji: '😊', logMode: 'mood',  title: "I'm new to wine",   sub: 'Keep it simple — just log how it made you feel' },
-  { key: 'enthusiast', emoji: '🍷', logMode: 'quick', title: 'I know what I like', sub: 'Quick logging — name, photo, a pour rating' },
-  { key: 'student',    emoji: '🎓', logMode: 'full',  title: 'I take it seriously', sub: 'Full structured tasting notes (WSET-style)' },
+  { key: 'beginner',   logMode: 'mood',  title: "I'm new to wine",   sub: 'Keep it simple — just log how it made you feel' },
+  { key: 'enthusiast', logMode: 'quick', title: 'I know what I like', sub: 'Quick logging — name, photo, a pour rating' },
+  { key: 'student',    logMode: 'full',  title: 'I take it seriously', sub: 'Full structured tasting notes (WSET-style)' },
 ];
+
+const personaIcon = (key) => key === 'beginner' ? <Smiley size={26} weight="fill" color="#d98324" />
+  : key === 'student' ? <GraduationCap size={26} weight="fill" color="#9a6fd6" />
+  : <WineTypeIcon type="Red" size={26} />;
 
 export default function Onboarding({ currentUser, onDone }) {
   const [step,        setStep]        = useState(1);
@@ -124,7 +130,7 @@ export default function Onboarding({ currentUser, onDone }) {
                   className={`ob-persona-card${persona === p.key ? ' selected' : ''}`}
                   onClick={() => pickPersona(p)}
                 >
-                  <span className="ob-persona-emoji">{p.emoji}</span>
+                  <span className="ob-persona-emoji">{personaIcon(p.key)}</span>
                   <span className="ob-persona-text">
                     <span className="ob-persona-title">{p.title}</span>
                     <span className="ob-persona-sub">{p.sub}</span>
@@ -148,7 +154,7 @@ export default function Onboarding({ currentUser, onDone }) {
                   style={selTypes.has(t.label) ? { borderColor: t.color } : {}}
                   onClick={() => toggleType(t.label)}
                 >
-                  <span className="ob-type-emoji">{t.emoji}</span>
+                  <span className="ob-type-emoji"><WineTypeIcon type={t.label} size={26} /></span>
                   <span className="ob-type-label">{t.label}</span>
                   <span className="ob-type-hint">{t.hint}</span>
                 </button>
@@ -168,7 +174,7 @@ export default function Onboarding({ currentUser, onDone }) {
                   className={`ob-grape-chip${selGrapes.has(g) ? ' selected' : ''}`}
                   onClick={() => toggleGrape(g)}
                 >
-                  🍇 {g}
+                  {g}
                 </button>
               ))}
             </div>

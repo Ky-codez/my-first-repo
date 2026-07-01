@@ -3,6 +3,7 @@ import WineCard from './WineCard.jsx';
 import SkeletonCard from './SkeletonCard.jsx';
 import Avatar from './Avatar.jsx';
 import { regionFlag, cleanLocation } from '../utils/regionFlags.js';
+import { Factory, MapPin, Calendar, Star } from '@phosphor-icons/react';
 
 const API = '';
 
@@ -102,7 +103,7 @@ export default function WineryPage({ wineryName, currentUser, onBack, onUserClic
         <>
           {/* Hero */}
           <div className="winery-hero">
-            <div className="winery-hero-icon">🏭</div>
+            <div className="winery-hero-icon"><Factory size={40} weight="fill" /></div>
             <h1 className="winery-hero-name">{data.name}</h1>
 
             {/* Follow winery — get notified of new reviews */}
@@ -122,13 +123,13 @@ export default function WineryPage({ wineryName, currentUser, onBack, onUserClic
             <div className="winery-hero-meta">
               {data.region && (
                 <span className="winery-meta-chip">
-                  📍 {rf ? cleanLocation(data.region) : data.region}
+                  <MapPin size={13} weight="fill" style={{ verticalAlign: '-0.12em' }} /> {rf ? cleanLocation(data.region) : data.region}
                   {rf && <span className={`fi fi-${rf.iso}`} style={{ marginLeft: 4 }} />}
                 </span>
               )}
               {data.vintages?.min_v && (
                 <span className="winery-meta-chip">
-                  📅 {data.vintages.min_v === data.vintages.max_v
+                  <Calendar size={13} weight="fill" style={{ verticalAlign: '-0.12em' }} /> {data.vintages.min_v === data.vintages.max_v
                     ? data.vintages.min_v
                     : `${data.vintages.min_v} – ${data.vintages.max_v}`}
                 </span>
@@ -180,7 +181,7 @@ export default function WineryPage({ wineryName, currentUser, onBack, onUserClic
             {data.grapes.length > 0 && (
               <div className="winery-grapes-row">
                 {data.grapes.map(g => (
-                  <span key={g.grapes} className="winery-grape-pill">🍇 {g.grapes}</span>
+                  <span key={g.grapes} className="winery-grape-pill">{g.grapes}</span>
                 ))}
               </div>
             )}
@@ -189,7 +190,7 @@ export default function WineryPage({ wineryName, currentUser, onBack, onUserClic
           {/* Top rated highlight */}
           {data.topWine && (
             <div className="winery-section">
-              <h2 className="winery-section-title">⭐ Best Reviewed</h2>
+              <h2 className="winery-section-title"><Star size={18} weight="fill" color="#e0a020" style={{ verticalAlign: '-0.15em' }} /> Best Reviewed</h2>
               <WineCard
                 wine={data.topWine}
                 currentUser={currentUser}

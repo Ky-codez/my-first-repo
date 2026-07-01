@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, memo } from 'react';
 import { createPortal } from 'react-dom';
 import Avatar from './Avatar.jsx';
 import AddWine from './AddWine.jsx';
@@ -7,7 +7,9 @@ import { getMoonInfo, TYPE_INFO, PHASE_INFO, ASCENDING_INFO } from '../utils/moo
 import { parseSAT, PRIMARY_LABELS } from './TastingNotes.jsx';
 import { regionFlag, cleanLocation } from '../utils/regionFlags.js';
 import { useLang, LANG_NAMES } from '../i18n.jsx';
-import { Heart, ChatCircle, Repeat, ShareNetwork, NotePencil, BookmarkSimple } from '@phosphor-icons/react';
+import { Heart, ChatCircle, Repeat, ShareNetwork, NotePencil, BookmarkSimple, Fire, Lock, Globe, PencilSimple, MapPin, Plant, Leaf, Champagne } from '@phosphor-icons/react';
+import { WineTypeIcon } from './wineIcons.jsx';
+import AmbassadorBadge from './AmbassadorBadge.jsx';
 
 // Renders the wine photo in a portrait (4:5) frame, Vivino-style.
 // If the owner framed the photo (PhotoAdjust), that exact region fills the
@@ -55,11 +57,6 @@ const WINE_TYPE_COLORS = {
   Sparkling: '#3498db', Champagne: '#d4af37', Dessert: '#e67e22',
   Fortified: '#9b59b6', Spirit: '#8d6e63',
 };
-const WINE_TYPE_EMOJI = {
-  Red: '🍷', White: '🥂', 'Rosé': '🌸',
-  Sparkling: '✨', Champagne: '🍾', Dessert: '🍯',
-  Fortified: '🏺', Spirit: '🥃',
-};
 // Gold and amber backgrounds need dark text for contrast; the rest take white
 const WINE_TYPE_TEXT = {
   Red: '#fff', White: '#3a2e00', 'Rosé': '#fff',
@@ -81,7 +78,7 @@ function Stars({ value }) {
   );
 }
 
-export default function WineCard({ wine: initialWine, currentUser, onDelete, onRelog, onUserClick, onWineClick, onWineryClick, rank }) {
+function WineCard({ wine: initialWine, currentUser, onDelete, onRelog, onUserClick, onWineClick, onWineryClick, rank }) {
   const [wine,           setWine]           = useState(initialWine);
   const [liked,          setLiked]          = useState(!!initialWine.user_liked);
   const [likeCount,      setLikeCount]      = useState(initialWine.like_count || 0);
@@ -285,17 +282,17 @@ export default function WineCard({ wine: initialWine, currentUser, onDelete, onR
       {/* Repost banner */}
       {wine.reposted_by && (
         <div className="wc-repost-banner">
-          🔁 <strong>@{wine.reposted_by}</strong> reposted
+          <Repeat size={14} weight="bold" style={{ verticalAlign: '-0.15em' }} /> <strong>@{wine.reposted_by}</strong> reposted
         </div>
       )}
       {/* Trending banner — why this post is ranked */}
       {rank != null && (
         <div className={`wc-trending-banner${rank < 3 ? ' top' : ''}`}>
-          <span className="wc-trending-rank">🔥 #{rank + 1}</span>
+          <span className="wc-trending-rank"><Fire size={14} weight="fill" style={{ verticalAlign: '-0.15em' }} /> #{rank + 1}</span>
           <span className="wc-trending-why">
-            {wine.like_count > 0 && `❤️ ${wine.like_count} ${wine.like_count === 1 ? 'like' : 'likes'}`}
+            {wine.like_count > 0 && <><Heart size={13} weight="fill" style={{ verticalAlign: '-0.12em' }} /> {wine.like_count} {wine.like_count === 1 ? 'like' : 'likes'}</>}
             {wine.like_count > 0 && wine.comment_count > 0 && ' · '}
-            {wine.comment_count > 0 && `💬 ${wine.comment_count} ${wine.comment_count === 1 ? 'comment' : 'comments'}`}
+            {wine.comment_count > 0 && <><ChatCircle size={13} weight="fill" style={{ verticalAlign: '-0.12em' }} /> {wine.comment_count} {wine.comment_count === 1 ? 'comment' : 'comments'}</>}
             {(wine.like_count > 0 || wine.comment_count > 0) && wine.trend_window ? ` ${wine.trend_window}` : ''}
           </span>
         </div>
@@ -305,7 +302,7 @@ export default function WineCard({ wine: initialWine, currentUser, onDelete, onR
         <button className="wc-user-btn" onClick={() => onUserClick?.(wine.user_id)}>
           <Avatar user={{ username: wine.username, avatar_path: wine.avatar_path }} size={38} />
           <div>
-            <span className="wc-username">@{wine.username}</span>
+            <span className="wc-username">@{wine.username}{wine.is_ambassador ? <AmbassadorBadge size={15} /> : null}</span>
             <span className="wc-date">
               {wine.opened_at
                 ? <>Opened {wine.opened_at}</>
@@ -314,7 +311,7 @@ export default function WineCard({ wine: initialWine, currentUser, onDelete, onR
           </div>
         </button>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {wine.is_private ? <span className="wc-private-badge">🔒 Private</span> : null}
+          {wine.is_private ? <span className="wc-private-badge"><Lock size={12} weight="fill" style={{ verticalAlign: '-0.12em' }} /> Private</span> : null}
           <span className="wc-type-badge" style={{ background: badgeColor, color: WINE_TYPE_TEXT[wine.type] || '#fff' }}>
             {wine.type}
           </span>
@@ -332,9 +329,9 @@ export default function WineCard({ wine: initialWine, currentUser, onDelete, onR
                   setWine(w => ({ ...w, is_private: data.is_private }));
                 }}
               >
-                {wine.is_private ? '🔒' : '🌐'}
+                {wine.is_private ? <Lock size={16} weight="fill" /> : <Globe size={16} />}
               </button>
-              <button className="wc-edit" onClick={() => setEditing(true)} title="Edit">✏️</button>
+              <button className="wc-edit" onClick={() => setEditing(true)} title="Edit"><PencilSimple size={16} /></button>
             </>
           )}
         </div>
@@ -423,7 +420,7 @@ export default function WineCard({ wine: initialWine, currentUser, onDelete, onR
       <div className="wc-body">
         <h3 className="wc-name">
           <button className="wc-name-btn" onClick={() => onWineClick?.({ name: wine.name, winery: wine.winery })}>
-            {WINE_TYPE_EMOJI[wine.type] || '🍷'} {wine.name}
+            <WineTypeIcon type={wine.type} size={18} /> {wine.name}
           </button>
         </h3>
         {wine.winery && (
@@ -435,20 +432,34 @@ export default function WineCard({ wine: initialWine, currentUser, onDelete, onR
           </p>
         )}
 
+        {wine.tagged_users && (
+          <p className="wc-tagged">
+            with {wine.tagged_users.split(',').map((t, i, arr) => {
+              const [id, uname] = t.split(':');
+              return (
+                <span key={id}>
+                  <button className="wc-tagged-link" onClick={() => onUserClick?.(Number(id))}>@{uname}</button>
+                  {i < arr.length - 1 ? ', ' : ''}
+                </span>
+              );
+            })}
+          </p>
+        )}
+
         <div className="wc-meta-row">
           <Stars value={wine.rating} />
           {wine.location && (() => {
             const rf = regionFlag(wine.location);
             return (
               <span className="wc-meta">
-                📍 {rf ? cleanLocation(wine.location) : wine.location}
+                <MapPin size={13} weight="fill" style={{ verticalAlign: '-0.12em' }} /> {rf ? cleanLocation(wine.location) : wine.location}
                 {rf && <span className={`fi fi-${rf.iso} wc-flag`} title={rf.country} />}
               </span>
             );
           })()}
-          {wine.grapes   && <span className="wc-meta">🍇 {wine.grapes}</span>}
-          {!!wine.is_biodynamic && <span className="wc-badge bio">🌱 Biodynamic</span>}
-          {!!wine.is_organic    && <span className="wc-badge org">🌿 Organic</span>}
+          {wine.grapes   && <span className="wc-meta">{wine.grapes}</span>}
+          {!!wine.is_biodynamic && <span className="wc-badge bio"><Plant size={12} weight="fill" style={{ verticalAlign: '-0.12em' }} /> Biodynamic</span>}
+          {!!wine.is_organic    && <span className="wc-badge org"><Leaf size={12} weight="fill" style={{ verticalAlign: '-0.12em' }} /> Organic</span>}
         </div>
 
         {wine.notes && (() => {
@@ -573,10 +584,10 @@ export default function WineCard({ wine: initialWine, currentUser, onDelete, onR
             {showSavePicker && (
               <div className="wc-save-picker">
                 <button onClick={() => saveToList('wishlist')}>
-                  📋 Want to Try {cellarItem?.list === 'wishlist' ? '✓' : ''}
+                  <BookmarkSimple size={15} style={{ verticalAlign: '-0.15em' }} /> Want to Try {cellarItem?.list === 'wishlist' ? '✓' : ''}
                 </button>
                 <button onClick={() => saveToList('cellar')}>
-                  🍾 In My Cellar {cellarItem?.list === 'cellar' ? '✓' : ''}
+                  <Champagne size={15} weight="fill" style={{ verticalAlign: '-0.15em' }} /> In My Cellar {cellarItem?.list === 'cellar' ? '✓' : ''}
                 </button>
                 {cellarItem && <button className="remove" onClick={() => saveToList(cellarItem.list)}>× Remove</button>}
               </div>
@@ -598,7 +609,7 @@ export default function WineCard({ wine: initialWine, currentUser, onDelete, onR
             <div key={c.id} className="wc-comment">
               <Avatar user={{ username: c.username, avatar_path: c.avatar_path }} size={28} />
               <div className="wc-comment-body">
-                <span className="wc-comment-user">@{c.username}</span>
+                <span className="wc-comment-user">@{c.username}{c.is_ambassador ? <AmbassadorBadge size={13} /> : null}</span>
                 {editingComment?.id === c.id ? (
                   <div className="wc-comment-edit">
                     <input
@@ -682,3 +693,7 @@ export default function WineCard({ wine: initialWine, currentUser, onDelete, onR
     </div>
   );
 }
+
+// Memoized: in a long feed, a state change in one card (or the parent) no longer
+// re-renders every other card — only cards whose props actually changed.
+export default memo(WineCard);

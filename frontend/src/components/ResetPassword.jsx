@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react';
+import { Eye, EyeSlash, CheckCircle } from '@phosphor-icons/react';
+import { WineTypeIcon } from './wineIcons.jsx';
 
 const API = '';
 
@@ -61,7 +63,7 @@ export default function ResetPassword({ token, onDone }) {
   return (
     <div className="login-page">
       <div className="login-box">
-        <div className="login-logo">🍷</div>
+        <div className="login-logo"><WineTypeIcon type="Red" size={48} /></div>
         <h1 className="login-title">Sipiary</h1>
 
         {checking && <p className="login-sub">Checking your reset link…</p>}
@@ -91,7 +93,7 @@ export default function ResetPassword({ token, onDone }) {
                 <div className="pw-field-actions">
                   {password && <button type="button" className="pw-clear-btn" onClick={() => setPassword('')} tabIndex={-1}>×</button>}
                   <button type="button" className="pw-toggle-btn" onClick={() => setShowPw(s => !s)} tabIndex={-1}>
-                    {showPw ? '🙈' : '👁'}
+                    {showPw ? <EyeSlash size={18} /> : <Eye size={18} />}
                   </button>
                 </div>
               </div>
@@ -133,7 +135,7 @@ export default function ResetPassword({ token, onDone }) {
 
         {done && (
           <div className="forgot-pw-sent">
-            <div className="forgot-pw-sent-icon">✅</div>
+            <div className="forgot-pw-sent-icon"><CheckCircle size={40} weight="fill" color="#5bb463" /></div>
             <p className="forgot-pw-sent-title">Password updated</p>
             <p className="forgot-pw-sent-sub">You've been logged out of all devices for safety. Log in with your new password.</p>
             <button type="button" onClick={onDone} style={{ marginTop: '1rem', width: '100%' }}>
@@ -143,7 +145,7 @@ export default function ResetPassword({ token, onDone }) {
         )}
 
         <p className="login-legal">
-          <a href="/terms">Terms</a> · <a href="/privacy">Privacy</a> · Drink responsibly 🍷
+          <a href="/terms">Terms</a> · <a href="/privacy">Privacy</a> · Drink responsibly
         </p>
       </div>
     </div>

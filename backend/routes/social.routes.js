@@ -66,7 +66,7 @@ router.post('/api/wines/:id/repost', requireAuth, (req, res) => {
 // Read comments (public)
 router.get('/api/wines/:id/comments', (req, res) => {
   const comments = db.prepare(`
-    SELECT c.*, u.username, u.avatar_path
+    SELECT c.*, u.username, u.avatar_path, u.is_ambassador
     FROM comments c JOIN users u ON c.user_id = u.id
     WHERE c.wine_id = ? ORDER BY c.created_at ASC
   `).all(req.params.id);
@@ -80,7 +80,7 @@ router.post('/api/wines/:id/comments', requireAuth, (req, res) => {
   if (!text?.trim()) return res.status(400).json({ error: 'text required' });
   const r = db.prepare('INSERT INTO comments (wine_id, user_id, text) VALUES (?, ?, ?)').run(req.params.id, userId, text.trim());
   const comment = db.prepare(`
-    SELECT c.*, u.username, u.avatar_path
+    SELECT c.*, u.username, u.avatar_path, u.is_ambassador
     FROM comments c JOIN users u ON c.user_id = u.id WHERE c.id = ?
   `).get(r.lastInsertRowid);
   const wine = db.prepare('SELECT user_id, name FROM wines WHERE id = ?').get(req.params.id);

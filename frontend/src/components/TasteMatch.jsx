@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
+import { Dna, MapPin, Star } from '@phosphor-icons/react';
+import { WineTypeIcon } from './wineIcons.jsx';
 
 const API = '';
 
@@ -58,20 +60,20 @@ export default function TasteMatch({ currentUser, otherUser }) {
   };
 
   const verdict = (s) =>
-    s >= 85 ? 'Practically wine soulmates 💜' :
-    s >= 65 ? 'You should split a bottle 🍷'  :
-    s >= 40 ? 'Different lanes, same road 🛣️' :
-              'Opposites — trade recommendations! 🔄';
+    s >= 85 ? 'Practically wine soulmates' :
+    s >= 65 ? 'You should split a bottle'  :
+    s >= 40 ? 'Different lanes, same road' :
+              'Opposites — trade recommendations!';
 
   if (state === 'idle') {
     return (
       <button className="tm-trigger" onClick={run}>
-        🧬 Taste Match with @{otherUser.username}
+        <Dna size={16} weight="fill" style={{ verticalAlign: '-0.18em' }} /> Taste Match with @{otherUser.username}
       </button>
     );
   }
   if (state === 'loading') {
-    return <div className="tm-card tm-loading">Comparing palates… 🍇</div>;
+    return <div className="tm-card tm-loading">Comparing palates…</div>;
   }
   if (match.score === null) {
     return <div className="tm-card tm-loading">{match.reason}</div>;
@@ -85,22 +87,22 @@ export default function TasteMatch({ currentUser, otherUser }) {
         {match.sharedTypes.length   > 0 && (
           <div className="tm-row">
             <span className="tm-row-label">Styles you both love</span>
-            <div className="tm-chips">{match.sharedTypes.map(t => <span key={t} className="tm-chip">🍷 {t}</span>)}</div>
+            <div className="tm-chips">{match.sharedTypes.map(t => <span key={t} className="tm-chip"><WineTypeIcon type={t} size={13} /> {t}</span>)}</div>
           </div>
         )}
         {match.sharedGrapes.length  > 0 && (
           <div className="tm-row">
             <span className="tm-row-label">Grapes in common</span>
-            <div className="tm-chips">{match.sharedGrapes.map(g => <span key={g} className="tm-chip">🍇 {g}</span>)}</div>
+            <div className="tm-chips">{match.sharedGrapes.map(g => <span key={g} className="tm-chip">{g}</span>)}</div>
           </div>
         )}
         {match.sharedRegions.length > 0 && (
           <div className="tm-row">
             <span className="tm-row-label">Regions in common</span>
-            <div className="tm-chips">{match.sharedRegions.map(r => <span key={r} className="tm-chip">📍 {r}</span>)}</div>
+            <div className="tm-chips">{match.sharedRegions.map(r => <span key={r} className="tm-chip"><MapPin size={12} weight="fill" style={{ verticalAlign: '-0.1em' }} /> {r}</span>)}</div>
           </div>
         )}
-        <p className="tm-rating-style">⭐ {match.ratingStyle}</p>
+        <p className="tm-rating-style"><Star size={14} weight="fill" color="#e0a020" style={{ verticalAlign: '-0.12em' }} /> {match.ratingStyle}</p>
       </div>
     </div>
   );

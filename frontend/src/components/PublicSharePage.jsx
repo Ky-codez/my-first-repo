@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import WineShareCard from './WineShareCard.jsx';
+import { Sparkle, Trophy, Dna, Moon, FloppyDisk } from '@phosphor-icons/react';
+import { WineTypeIcon } from './wineIcons.jsx';
 
 const API = '';
 
@@ -51,7 +53,7 @@ export default function PublicSharePage({ target, onJoin }) {
   return (
     <div className="public-share-page">
       <div className="psp-header">
-        <span className="psp-logo">🍷 Sipiary</span>
+        <span className="psp-logo"><WineTypeIcon type="Red" size={20} /> Sipiary</span>
         <button className="btn-primary psp-join-btn" onClick={onJoin}>Join free →</button>
       </div>
       <div className="psp-body">
@@ -61,7 +63,7 @@ export default function PublicSharePage({ target, onJoin }) {
         </div>
         <div className="psp-actions">
           <button className="btn-primary" onClick={download} disabled={dlStatus === 'rendering'}>
-            {dlStatus === 'rendering' ? '⏳ Rendering…' : dlStatus === 'done' ? '✓ Downloaded!' : '💾 Save Image'}
+            {dlStatus === 'rendering' ? 'Rendering…' : dlStatus === 'done' ? '✓ Downloaded!' : <><FloppyDisk size={15} weight="fill" style={{ verticalAlign: '-0.15em' }} /> Save Image</>}
           </button>
           <button className="btn-secondary" onClick={onJoin}>
             Join Sipiary to log your own wines
@@ -73,22 +75,22 @@ export default function PublicSharePage({ target, onJoin }) {
           <p className="psp-features-title">Wine, but make it fun</p>
           <div className="psp-feature-grid">
             <div className="psp-feature">
-              <span className="psp-feature-emoji">✨</span>
+              <span className="psp-feature-emoji"><Sparkle size={28} weight="fill" color="#b06fd6" /></span>
               <span className="psp-feature-name">Vibe Deck</span>
               <span className="psp-feature-desc">Swipe wines by mood — cozy night, date night, golden hour</span>
             </div>
             <div className="psp-feature">
-              <span className="psp-feature-emoji">🏆</span>
+              <span className="psp-feature-emoji"><Trophy size={28} weight="fill" color="#e0a020" /></span>
               <span className="psp-feature-name">Holo Badges</span>
               <span className="psp-feature-desc">Collect holographic cards for exploring styles & regions</span>
             </div>
             <div className="psp-feature">
-              <span className="psp-feature-emoji">🧬</span>
+              <span className="psp-feature-emoji"><Dna size={28} weight="fill" color="#4f86d6" /></span>
               <span className="psp-feature-name">Taste Match</span>
               <span className="psp-feature-desc">See how wine-compatible you are with friends</span>
             </div>
             <div className="psp-feature">
-              <span className="psp-feature-emoji">🌙</span>
+              <span className="psp-feature-emoji"><Moon size={28} weight="fill" color="#9a6fd6" /></span>
               <span className="psp-feature-name">Lunar Calendar</span>
               <span className="psp-feature-desc">Open bottles on the best biodynamic days</span>
             </div>

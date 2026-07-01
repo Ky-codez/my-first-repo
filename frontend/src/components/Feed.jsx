@@ -1,9 +1,12 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import WineCard from './WineCard.jsx';
 import SkeletonCard from './SkeletonCard.jsx';
 import MainMenu from './MainMenu.jsx';
 import { getMoonInfo, TYPE_INFO, PHASE_INFO } from '../utils/moonCalendar.js';
 import { useLang } from '../i18n.jsx';
+import { Fire, Users, Dna, Plant } from '@phosphor-icons/react';
+import { WineTypeIcon } from './wineIcons.jsx';
+import AmbassadorBadge from './AmbassadorBadge.jsx';
 
 const API = '';
 
@@ -15,6 +18,7 @@ export default function Feed({ currentUser, onAddWine, onRelog, onUserClick, onL
   const [wines,    setWines]    = useState([]);
   const [loading,  setLoading]  = useState(true);
   const [feedMode, setFeedMode] = useState('explore'); // 'explore' | 'following'
+  const [green, setGreen] = useState(false);           // filter to organic / biodynamic only
 
   const switchMode = (mode) => {
     if (mode !== feedMode) setFeedMode(mode);
@@ -40,6 +44,39 @@ export default function Feed({ currentUser, onAddWine, onRelog, onUserClick, onL
       .catch(() => {});
   }, [currentUser]);
 
+  // ── Infinite scroll ──────────────────────────────────────────────────────
+  const PAGE = 20;
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const offsetRef  = useRef(0);     // how many rows we've already pulled
+  const loadingRef = useRef(false); // guards against overlapping requests
+  const sentinelRef = useRef(null);
+
+  // Load one page. append=false resets to the top (mode switch / refresh).
+  const loadPage = useCallback((append) => {
+    if (loadingRef.current) return;
+    if (append && !hasMore) return;
+    loadingRef.current = true;
+    append ? setLoadingMore(true) : setLoading(true);
+    const off = append ? offsetRef.current : 0;
+    const params = new URLSearchParams({ currentUserId: currentUser?.id || 0, limit: PAGE, offset: off });
+    if (feedMode === 'following') params.append('feed', 'following');
+    if (green) params.append('green', '1');
+    fetch(`${API}/api/wines?${params}`)
+      .then(r => r.json())
+      .then(data => {
+        const arr = Array.isArray(data) ? data : [];
+        setWines(prev => (append ? [...prev, ...arr] : arr));
+        offsetRef.current = off + arr.length;
+        setHasMore(arr.length === PAGE);
+      })
+      .catch(() => {})
+      .finally(() => { setLoading(false); setLoadingMore(false); loadingRef.current = false; });
+  }, [feedMode, currentUser, hasMore, green]);
+
+  // Refresh from the top — used after follow/delete and on mode/user change.
+  const reload = useCallback(() => { offsetRef.current = 0; setHasMore(true); loadPage(false); }, [loadPage]);
+
   const handleFollow = async (userId) => {
     await fetch(`${API}/api/users/${userId}/follow`, {
       method: 'POST',
@@ -47,24 +84,22 @@ export default function Feed({ currentUser, onAddWine, onRelog, onUserClick, onL
       body: JSON.stringify({ follower_id: currentUser.id }),
     });
     setSuggestions(s => s.filter(u => u.id !== userId));
-    fetchWines();
+    reload();
   };
 
+  useEffect(() => { offsetRef.current = 0; setHasMore(true); loadPage(false); /* eslint-disable-next-line */ }, [feedMode, currentUser, green]);
 
-  const fetchWines = useCallback(() => {
-    setLoading(true);
-    const params = new URLSearchParams({ currentUserId: currentUser?.id || 0 });
-    if (feedMode === 'following') params.append('feed', 'following');
-    fetch(`${API}/api/wines?${params}`)
-      .then(r => r.json())
-      .then(data => { setWines(Array.isArray(data) ? data : []); setLoading(false); })
-      .catch(() => setLoading(false));
-  }, [feedMode, currentUser]);
-
+  // Auto-load the next page when the sentinel scrolls into view. Depends on
+  // `loading` so it (re)attaches once the sentinel mounts after the first page.
   useEffect(() => {
-    const t = setTimeout(fetchWines, 0);
-    return () => clearTimeout(t);
-  }, [fetchWines]);
+    const el = sentinelRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting) loadPage(true);
+    }, { rootMargin: '600px' });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [loadPage, loading]);
 
   const handleDelete = async (id) => {
     await fetch(`${API}/api/wines/${id}`, { method: 'DELETE' });
@@ -75,13 +110,13 @@ export default function Feed({ currentUser, onAddWine, onRelog, onUserClick, onL
     <div className="feed-page">
       {/* Top nav — logo + search + hamburger menu */}
       <header className="feed-header">
-        <button className="feed-logo" onClick={onHome}>🍷 Sipiary</button>
+        <button className="feed-logo" onClick={onHome}><WineTypeIcon type="Red" size={20} /> Sipiary</button>
       </header>
 
       {/* Profile completion banner — only for users with no avatar */}
       {!currentUser?.avatar_path && (
         <div className="profile-prompt-banner">
-          <span>📷 Add a profile photo to personalise your Sipiary</span>
+          <span>Add a profile photo to personalise your Sipiary</span>
           <button className="profile-prompt-btn" onClick={onProfileClick}>Set up →</button>
         </div>
       )}
@@ -111,7 +146,7 @@ export default function Feed({ currentUser, onAddWine, onRelog, onUserClick, onL
       {/* Logging streak — celebrates consistency, nudges users back */}
       {streak > 0 && (
         <button className="streak-chip" onClick={onAddWine}>
-          🔥 <strong>{streak}-week streak</strong>
+          <Fire size={16} weight="fill" style={{ verticalAlign: '-0.18em' }} /> <strong>{streak}-week streak</strong>
           <span>{streak === 1 ? 'Logged this week — nice!' : 'Log a wine this week to keep it going'}</span>
         </button>
       )}
@@ -126,6 +161,17 @@ export default function Feed({ currentUser, onAddWine, onRelog, onUserClick, onL
         </button>
       </div>
 
+      {/* Natural-wine filter — organic / biodynamic only. Serves the niche. */}
+      <div className="feed-filter-row">
+        <button
+          className={`feed-filter-chip${green ? ' active' : ''}`}
+          onClick={() => setGreen(g => !g)}
+          aria-pressed={green}
+        >
+          <Plant size={14} weight="fill" style={{ verticalAlign: '-0.12em' }} /> Natural only
+        </button>
+      </div>
+
       {/* Feed — keyed by mode so switching plays the gentle fade-in */}
       <div className="feed-list" key={feedMode}>
         {loading && <SkeletonCard count={3} />}
@@ -133,7 +179,7 @@ export default function Feed({ currentUser, onAddWine, onRelog, onUserClick, onL
           <div className="empty-feed">
             {feedMode === 'following'
               ? <>
-                  <p>👥 Your Following feed is empty</p>
+                  <p><Users size={16} weight="fill" style={{ verticalAlign: '-0.18em' }} /> Your Following feed is empty</p>
                   <p style={{fontSize:'0.85rem',color:'var(--text-muted)',marginTop:'0.5rem'}}>
                     {suggestions.length > 0 ? 'Follow someone to fill it up:' : 'Find people via search and follow them!'}
                   </p>
@@ -147,8 +193,8 @@ export default function Feed({ currentUser, onAddWine, onRelog, onUserClick, onL
                               : <span className="fs-avatar fs-avatar-fallback">{u.username.slice(0, 2).toUpperCase()}</span>
                             }
                             <span className="fs-info">
-                              <span className="fs-name">@{u.username}</span>
-                              {u.match != null && <span className="fs-match">🧬 {u.match}% taste match</span>}
+                              <span className="fs-name">@{u.username}{u.is_ambassador ? <AmbassadorBadge size={13} /> : null}</span>
+                              {u.match != null && <span className="fs-match"><Dna size={13} weight="fill" style={{ verticalAlign: '-0.12em' }} /> {u.match}% taste match</span>}
                               {u.reason && <span className="fs-reason">{u.reason}</span>}
                               <span className="fs-meta">{u.post_count} {u.post_count === 1 ? 'post' : 'posts'} · {u.follower_count} {u.follower_count === 1 ? 'follower' : 'followers'}</span>
                             </span>
@@ -159,7 +205,7 @@ export default function Feed({ currentUser, onAddWine, onRelog, onUserClick, onL
                     </div>
                   )}
                 </>
-              : <><p>🍷 No wines found.</p><button className="btn-primary" onClick={onAddWine}>Log your first wine</button></>
+              : <><p><WineTypeIcon type="Red" size={16} /> No wines found.</p><button className="btn-primary" onClick={onAddWine}>Log your first wine</button></>
             }
           </div>
         )}
@@ -179,8 +225,8 @@ export default function Feed({ currentUser, onAddWine, onRelog, onUserClick, onL
                           ? <img className="pymk-avatar" src={`${API}${u.avatar_path}`} alt="" loading="lazy" decoding="async" />
                           : <span className="pymk-avatar pymk-avatar-fallback">{u.username.slice(0, 2).toUpperCase()}</span>
                         }
-                        <span className="pymk-name">@{u.username}</span>
-                        {u.match != null && <span className="pymk-match">🧬 {u.match}% match</span>}
+                        <span className="pymk-name">@{u.username}{u.is_ambassador ? <AmbassadorBadge size={13} /> : null}</span>
+                        {u.match != null && <span className="pymk-match"><Dna size={13} weight="fill" style={{ verticalAlign: '-0.12em' }} /> {u.match}% match</span>}
                         {u.reason && <span className="pymk-reason">{u.reason}</span>}
                         <span className="pymk-meta">{u.post_count} {u.post_count === 1 ? 'post' : 'posts'}</span>
                       </button>
@@ -192,6 +238,13 @@ export default function Feed({ currentUser, onAddWine, onRelog, onUserClick, onL
             )}
           </div>
         ))}
+        {/* Infinite-scroll sentinel + spinner */}
+        {!loading && wines.length > 0 && (
+          <div ref={sentinelRef} className="feed-sentinel">
+            {loadingMore && <SkeletonCard count={1} />}
+            {!hasMore && <p className="feed-end">You're all caught up.</p>}
+          </div>
+        )}
       </div>
     </div>
   );

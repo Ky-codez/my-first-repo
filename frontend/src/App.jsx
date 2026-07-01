@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 
 function useTheme() {
   const [theme, setTheme] = useState(() => localStorage.getItem('sipiary_theme') || 'auto');
@@ -11,29 +11,40 @@ function useTheme() {
   return [theme, setTheme];
 }
 import './App.css';
+// Eager: everything needed for first paint (login → feed) and the small chrome.
 import Login           from './components/Login.jsx';
 import Feed            from './components/Feed.jsx';
-import AddWine         from './components/AddWine.jsx';
-import Profile         from './components/Profile.jsx';
-import LunarCalendar   from './components/LunarCalendar.jsx';
-import WinePage        from './components/WinePage.jsx';
-import Cellar          from './components/Cellar.jsx';
-import Notifications   from './components/Notifications.jsx';
-import PublicSharePage from './components/PublicSharePage.jsx';
 import BottomNav       from './components/BottomNav.jsx';
-import WineryPage      from './components/WineryPage.jsx';
-import DiscoverPage    from './components/DiscoverPage.jsx';
-import Onboarding      from './components/Onboarding.jsx';
-import AgeGate         from './components/AgeGate.jsx';
-import LegalPage       from './components/LegalPage.jsx';
-import AdminPage       from './components/AdminPage.jsx';
 import InstallGuide    from './components/InstallGuide.jsx';
-import ResetPassword   from './components/ResetPassword.jsx';
+import AgeGate         from './components/AgeGate.jsx';
+
+// Code-split everything else: each view downloads on first use, keeping the
+// initial bundle (and time-to-interactive on the feed) small.
+const AddWine         = lazy(() => import('./components/AddWine.jsx'));
+const Profile         = lazy(() => import('./components/Profile.jsx'));
+const PublicProfile   = lazy(() => import('./components/PublicProfile.jsx'));
+const LunarCalendar   = lazy(() => import('./components/LunarCalendar.jsx'));
+const WhatsNew        = lazy(() => import('./components/WhatsNew.jsx'));
+const WinePage        = lazy(() => import('./components/WinePage.jsx'));
+const Cellar          = lazy(() => import('./components/Cellar.jsx'));
+const Notifications   = lazy(() => import('./components/Notifications.jsx'));
+const PublicSharePage = lazy(() => import('./components/PublicSharePage.jsx'));
+const WineryPage      = lazy(() => import('./components/WineryPage.jsx'));
+const DiscoverPage    = lazy(() => import('./components/DiscoverPage.jsx'));
+const Onboarding      = lazy(() => import('./components/Onboarding.jsx'));
+const LegalPage       = lazy(() => import('./components/LegalPage.jsx'));
+const ResetPassword   = lazy(() => import('./components/ResetPassword.jsx'));
+const AdminPage       = lazy(() => import('./components/AdminPage.jsx'));
+const BottleLab       = lazy(() => import('./components/BottleLab.jsx'));
+const WinePassport    = lazy(() => import('./components/WinePassport.jsx'));
+
+const ViewLoader = () => <div className="view-loading">Loading…</div>;
 
 // Detect a wine-share URL and return how to resolve it.
-//   Canonical:  /@username/<slug>      → { username, slug }
-//   Legacy:     /@username/wine/:id    → { id }
-//               /share/wine/:id        → { id }
+//   Public profile:   /@username              → { username }
+//   Canonical:        /@username/<slug>      → { username, slug }
+//   Legacy:           /@username/wine/:id    → { id }
+//                     /share/wine/:id        → { id }
 // Legacy id forms are checked first so /@user/wine/8 isn't read as slug "wine".
 function getShareTarget() {
   const p = window.location.pathname;
@@ -41,6 +52,9 @@ function getShareTarget() {
   if (m) return { id: m[1] };
   m = p.match(/^\/@([^/]+)\/([^/]+)\/?$/);
   if (m) return { username: decodeURIComponent(m[1]), slug: decodeURIComponent(m[2]) };
+  // Just /@username — public profile view
+  m = p.match(/^\/@([^/]+)\/?$/);
+  if (m) return { username: decodeURIComponent(m[1]), isPublicProfile: true };
   return null;
 }
 
@@ -159,6 +173,23 @@ export default function App() {
     };
   }, [currentUser, authToken]);
 
+  // Warm the most-used lazy chunks once the app is idle, so the first tap into
+  // Profile / Discover / log / a wine page is instant instead of showing a
+  // loader. Runs after first paint, never blocks it.
+  useEffect(() => {
+    if (!currentUser) return;
+    const idle = window.requestIdleCallback || ((cb) => setTimeout(cb, 1500));
+    const cancel = window.cancelIdleCallback || clearTimeout;
+    const id = idle(() => {
+      import('./components/Profile.jsx');
+      import('./components/DiscoverPage.jsx');
+      import('./components/AddWine.jsx');
+      import('./components/WinePage.jsx');
+      import('./components/Notifications.jsx');
+    });
+    return () => cancel(id);
+  }, [currentUser]);
+
   const openWinePage = ({ name, winery }) => {
     setWineBottle({ name, winery });
     setView('wine');
@@ -176,30 +207,51 @@ export default function App() {
 
   // Legal pages are always readable — even before login or the age gate.
   const legalPage = getLegalPage();
-  if (legalPage) return <LegalPage page={legalPage} onBack={() => { window.location.href = '/'; }} />;
+  if (legalPage) return <Suspense fallback={<ViewLoader />}><LegalPage page={legalPage} onBack={() => { window.location.href = '/'; }} /></Suspense>;
+
+  // Internal 3D-bottle prototype preview (not linked in the app).
+  if (window.location.pathname.replace(/\/$/, '') === '/bottle-lab') return <Suspense fallback={<ViewLoader />}><BottleLab /></Suspense>;
 
   // Password-reset page — reachable from the emailed link, no login/age gate.
   const resetToken = getResetToken();
   if (resetToken !== null) {
-    return <ResetPassword token={resetToken} onDone={() => { window.location.href = '/'; }} />;
+    return <Suspense fallback={<ViewLoader />}><ResetPassword token={resetToken} onDone={() => { window.location.href = '/'; }} /></Suspense>;
   }
 
   // Age gate — Sipiary is alcohol-related, so block everything until the
   // visitor confirms they're of legal drinking age (remembered in localStorage).
   if (!ageOk) return <AgeGate onConfirm={() => setAgeOk(true)} />;
 
+  // Public profile view — no login required, shows user's wines + taste profile
+  if (shareTarget?.isPublicProfile) {
+    return (
+      <Suspense fallback={<ViewLoader />}>
+        <PublicProfile
+          username={shareTarget.username}
+          currentUser={currentUser}
+          onJoin={() => {
+            setView('feed');
+          }}
+          onLogin={handleLogin}
+        />
+      </Suspense>
+    );
+  }
+
   // Public share page — no login required
   if (view === 'public-share' && shareTarget) {
     return (
-      <PublicSharePage
-        target={shareTarget}
-        onJoin={() => {
-          window.history.replaceState({}, '', '/');
-          if (currentUser) setView('feed');
-          // else Login will show naturally once we clear public-share
-          setView('feed');
-        }}
-      />
+      <Suspense fallback={<ViewLoader />}>
+        <PublicSharePage
+          target={shareTarget}
+          onJoin={() => {
+            window.history.replaceState({}, '', '/');
+            if (currentUser) setView('feed');
+            // else Login will show naturally once we clear public-share
+            setView('feed');
+          }}
+        />
+      </Suspense>
     );
   }
 
@@ -207,21 +259,23 @@ export default function App() {
 
   // Owner-only founder dashboard at /admin (server enforces who's an admin).
   if (window.location.pathname.replace(/\/$/, '') === '/admin') {
-    return <AdminPage onBack={() => { window.location.href = '/'; }} />;
+    return <Suspense fallback={<ViewLoader />}><AdminPage onBack={() => { window.location.href = '/'; }} /></Suspense>;
   }
 
   // New-user onboarding ? full screen, before the main app
   if (view === 'onboarding') {
     return (
-      <Onboarding
-        currentUser={currentUser}
-        onDone={() => { setProfileId(currentUser.id); setView('profile'); }}
-      />
+      <Suspense fallback={<ViewLoader />}>
+        <Onboarding
+          currentUser={currentUser}
+          onDone={() => { setProfileId(currentUser.id); setView('profile'); }}
+        />
+      </Suspense>
     );
   }
 
   return (
-    <>
+    <Suspense fallback={<ViewLoader />}>
       <InstallGuide />
       {view === 'feed' && (
         <Feed
@@ -231,6 +285,7 @@ export default function App() {
           onRelog={w => { setRelogWine(w); setView('log'); }}
           onUserClick={openProfile}
           onLunarClick={() => setView('lunar')}
+          onWhatsNewClick={() => setView('whatsnew')}
           onCellarClick={() => setView('cellar')}
           onWineClick={openWinePage}
           onWineryClick={openWineryPage}
@@ -258,7 +313,9 @@ export default function App() {
           theme={theme}
           onThemeChange={setTheme}
           onLunarClick={() => setView('lunar')}
+          onWhatsNewClick={() => setView('whatsnew')}
           onCellarClick={() => setView('cellar')}
+          onPassportClick={() => setView('passport')}
           onUserUpdate={updated => {
             setCurrentUser(updated);
             localStorage.setItem('sipiary_user', JSON.stringify(updated));
@@ -302,6 +359,14 @@ export default function App() {
         <LunarCalendar onBack={() => setView('feed')} />
       )}
 
+      {view === 'whatsnew' && (
+        <WhatsNew onBack={() => setView('feed')} />
+      )}
+
+      {view === 'passport' && (
+        <WinePassport currentUser={currentUser} userId={currentUser.id} onBack={() => setView('profile')} onWineClick={openWinePage} />
+      )}
+
       {view === 'cellar' && (
         <Cellar
           currentUser={currentUser}
@@ -341,6 +406,6 @@ export default function App() {
         onAddWine={() => setView('log')}
         onVibes={() => setView('vibes')}
       />
-    </>
+    </Suspense>
   );
 }

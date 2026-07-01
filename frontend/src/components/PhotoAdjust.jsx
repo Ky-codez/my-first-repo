@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { MagnifyingGlass } from '@phosphor-icons/react';
 
 // WYSIWYG photo framing: the photo sits inside the real 4:5 card frame.
 // Drag to reposition, pinch / scroll / slider to zoom — what you see in the
@@ -192,7 +193,7 @@ export default function PhotoAdjust({ src, value, onChange }) {
         <span className="pa-hint">↔ Drag to reposition</span>
       </div>
       <div className="pa-controls">
-        <span className="pa-zoom-ico" aria-hidden="true">🔍</span>
+        <span className="pa-zoom-ico" aria-hidden="true"><MagnifyingGlass size={15} /></span>
         <input
           className="pa-zoom"
           type="range"

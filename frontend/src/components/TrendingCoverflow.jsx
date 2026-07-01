@@ -1,9 +1,14 @@
 import { useRef, useEffect } from 'react';
+import { Medal, Heart } from '@phosphor-icons/react';
+import { WineTypeIcon } from './wineIcons.jsx';
 
 const API = '';
-const TYPE_EMOJI = { Red: '🍷', White: '🥂', 'Rosé': '🌸', Sparkling: '✨', Champagne: '🍾', Dessert: '🍯', Fortified: '🏺', Spirit: '🥃' };
 
-const RANK_LABEL = ['', '🥇', '🥈', '🥉'];
+// Gold / silver / bronze medals for ranks 1–3.
+const RANK_COLOR = [null, '#e0a020', '#9aa3ad', '#b87333'];
+const rankMedal = (rank) => RANK_COLOR[rank]
+  ? <Medal size={20} weight="fill" color={RANK_COLOR[rank]} />
+  : null;
 
 function TrendingTile({ wine, rank, tall, onWineClick }) {
   return (
@@ -14,13 +19,13 @@ function TrendingTile({ wine, rank, tall, onWineClick }) {
     >
       {wine.image_path
         ? <img className="tcf-img" src={`${API}${wine.image_path}`} alt="" draggable="false" loading="lazy" decoding="async" />
-        : <div className="tcf-placeholder">{TYPE_EMOJI[wine.type] || '🍷'}</div>
+        : <div className="tcf-placeholder"><WineTypeIcon type={wine.type} size={40} /></div>
       }
       <div className="tcf-shade" />
-      <span className="tcf-rank-medal">{RANK_LABEL[rank]}</span>
+      <span className="tcf-rank-medal">{rankMedal(rank)}</span>
       <div className="tcf-info">
         <span className="tcf-name">{wine.name}</span>
-        <span className="tcf-meta">★ {Number(wine.rating).toFixed(1)} · ❤️ {wine.like_count}</span>
+        <span className="tcf-meta">★ {Number(wine.rating).toFixed(1)} · <Heart size={12} weight="fill" style={{ verticalAlign: '-0.1em' }} /> {wine.like_count}</span>
       </div>
     </button>
   );

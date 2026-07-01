@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useLang } from '../i18n.jsx';
+import { Package, BookmarkSimple, Champagne } from '@phosphor-icons/react';
+import { WineTypeIcon } from './wineIcons.jsx';
 
 const API = '';
 const WINE_TYPES = ['Red', 'White', 'Rosé', 'Sparkling', 'Champagne', 'Dessert', 'Fortified', 'Spirit'];
@@ -18,7 +20,7 @@ function CellarItem({ item, onMove, onDelete, onOpenWine, onLogWine }) {
       <div className="cellar-item-body">
         {/* Tap the name to see all community reviews of this bottle */}
         <button className="cellar-item-name cellar-item-link" onClick={() => onOpenWine(item)} title="See community reviews">
-          🍷 {item.name}
+          <WineTypeIcon type={item.type} size={16} /> {item.name}
         </button>
         {item.winery && <div className="cellar-item-meta">{item.winery}{item.vintage ? ` · ${item.vintage}` : ''}</div>}
         {item.type && (
@@ -31,10 +33,12 @@ function CellarItem({ item, onMove, onDelete, onOpenWine, onLogWine }) {
       <div className="cellar-item-actions">
         {/* Close the loop: drinking a saved bottle turns it into a journal post */}
         <button className="cellar-log-btn" onClick={() => onLogWine(item)} title="Drank it? Log it to your journal">
-          🍷 Drank it — log now
+          <WineTypeIcon type={item.type} size={15} /> Drank it — log now
         </button>
         <button className="cellar-move-btn" onClick={() => onMove(item)} title={item.list === 'wishlist' ? 'Move to Cellar' : 'Move to Wishlist'}>
-          {item.list === 'wishlist' ? '📦 Move to Cellar' : '📋 Move to Wishlist'}
+          {item.list === 'wishlist'
+            ? <><Package size={15} weight="fill" style={{ verticalAlign: '-0.15em' }} /> Move to Cellar</>
+            : <><BookmarkSimple size={15} style={{ verticalAlign: '-0.15em' }} /> Move to Wishlist</>}
         </button>
         {confirming ? (
           <button className="cellar-delete-btn confirming" onClick={() => onDelete(item.id)} onMouseLeave={() => setConfirming(false)} title="Click again to remove">
@@ -166,7 +170,9 @@ export default function Cellar({ currentUser, onBack, onWineClick, onRelog }) {
         ? <p className="loading-state">Loading…</p>
         : current.length === 0
           ? <div className="cellar-empty">
-              <p>{tab === 'wishlist' ? '📋 No wines on your wish list yet.' : '🍾 Your cellar is empty.'}</p>
+              <p>{tab === 'wishlist'
+                ? <><BookmarkSimple size={15} style={{ verticalAlign: '-0.15em' }} /> No wines on your wish list yet.</>
+                : <><Champagne size={15} weight="fill" style={{ verticalAlign: '-0.15em' }} /> Your cellar is empty.</>}</p>
               <p className="cellar-empty-hint">Add a wine above, or save one from any review in your feed.</p>
             </div>
           : <div className="cellar-list">

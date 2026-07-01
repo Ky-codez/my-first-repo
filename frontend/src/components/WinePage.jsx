@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import WineCard from './WineCard.jsx';
 import SkeletonCard from './SkeletonCard.jsx';
+import { Users } from '@phosphor-icons/react';
+import { WineTypeIcon } from './wineIcons.jsx';
 
 const API = '';
 
@@ -86,7 +88,7 @@ export default function WinePage({ wineName, winery, currentUser, onBack, onRelo
           )}
         </div>
 
-        <h1 className="bottle-name">🍷 {wineName}</h1>
+        <h1 className="bottle-name"><WineTypeIcon type="Red" size={22} /> {wineName}</h1>
         {winery && <p className="bottle-winery">{winery}</p>}
 
         <div className="bottle-stats">
@@ -124,7 +126,7 @@ export default function WinePage({ wineName, winery, currentUser, onBack, onRelo
           target="_blank"
           rel="noopener noreferrer"
         >
-          🛒 Find this bottle
+          Find this bottle
         </a>
       </div>
 
@@ -154,7 +156,7 @@ export default function WinePage({ wineName, winery, currentUser, onBack, onRelo
                 <span className="rh-count">{count}</span>
                 {circleCount > 0 && (
                   <span className="rh-circle-count" title={`${circleCount} from your circle`}>
-                    👥{circleCount}
+                    <Users size={13} weight="fill" style={{ verticalAlign: '-0.12em' }} />{circleCount}
                   </span>
                 )}
               </div>

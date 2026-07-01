@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
+import { Handshake, EnvelopeSimple } from '@phosphor-icons/react';
+import { WineTypeIcon } from './wineIcons.jsx';
 
 const API = '';
 
@@ -137,12 +139,12 @@ export default function Login({ onLogin }) {
   return (
     <div className="login-page">
       <div className="login-box">
-        <div className="login-logo">🍷</div>
+        <div className="login-logo"><WineTypeIcon type="Red" size={48} /></div>
         <h1 className="login-title">Sipiary</h1>
         <p className="login-sub">Wine, your way — track it, discover it, share it</p>
 
         {refUsername && (
-          <div className="login-ref-banner">🤝 <strong>@{refUsername}</strong> invited you to Sipiary — sign up to say cheers!</div>
+          <div className="login-ref-banner"><Handshake size={16} weight="fill" style={{ verticalAlign: '-0.18em' }} /> <strong>@{refUsername}</strong> invited you to Sipiary — sign up to say cheers!</div>
         )}
 
         <div className="login-mode-toggle">
@@ -336,7 +338,7 @@ export default function Login({ onLogin }) {
           <div className="forgot-pw-panel">
             {forgotSent ? (
               <div className="forgot-pw-sent">
-                <div className="forgot-pw-sent-icon">📬</div>
+                <div className="forgot-pw-sent-icon"><EnvelopeSimple size={40} weight="fill" /></div>
                 <p className="forgot-pw-sent-title">Check your inbox</p>
                 <p className="forgot-pw-sent-sub">If an account with that email exists, we sent a reset link. Check your spam folder too.</p>
                 <button
@@ -373,7 +375,7 @@ export default function Login({ onLogin }) {
         )}
 
         <p className="login-legal">
-          <a href="/terms">Terms</a> · <a href="/privacy">Privacy</a> · Drink responsibly 🍷
+          <a href="/terms">Terms</a> · <a href="/privacy">Privacy</a> · Drink responsibly
         </p>
       </div>
     </div>

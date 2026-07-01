@@ -2,10 +2,14 @@
 // The journal itself: feed, search, trending, winery & bottle pages, the
 // Vibe Deck, and wine CRUD.
 //
-// SECURITY NOTES:
-//   - Private wines (is_private = 1) are only visible to their owner.
-//     Visibility ALWAYS comes from req.user (verified token), never from a
-//     query parameter the client could spoof.
+// SECURITY NOTES (read before touching any query):
+//   - Who can see a wine is decided in ONE place: visibleWines(viewerId) in
+//     lib/helpers.js (visibleWinesNoJoin for queries without a users join).
+//     Every list/feed query drops it into its WHERE — don't hand-roll the
+//     privacy condition inline; reuse the helper so the rule stays consistent.
+//   - viewerId for privacy ALWAYS comes from the verified token (req.user?.id),
+//     never from a query param a client could spoof. Get both ids from
+//     viewerIds(req): `uid` is for engagement flags only, `viewerId` for access.
 //   - Create/edit/delete require a token; edit/delete also check ownership.
 //
 // ROUTE ORDER: literal paths (/discover, /trending, /bottle) are registered
@@ -14,7 +18,7 @@
 const express = require('express');
 const db = require('../db');
 const { requireAuth } = require('../lib/auth');
-const { wineCardSelect, wineCardJoins, flagUid } = require('../lib/helpers');
+const { wineCardSelect, wineCardJoins, viewerIds, visibleWines, visibleWinesNoJoin, TAGGED_SQL } = require('../lib/helpers');
 const { slugifyBase, uniqueSlug } = require('../lib/slug');
 const { earnedBadgeIds, newlyEarned } = require('../lib/badges');
 const { wineUpload } = require('../lib/upload');
@@ -22,6 +26,32 @@ const { optimizeImage } = require('../lib/optimizeImage');
 const { wsPush } = require('../lib/ws');
 
 const router = express.Router();
+
+// Set the "tasted with" tags for a wine and notify newly-tagged users.
+// `taggedRaw` is a comma-separated list of user ids from the form. The author
+// can't tag themselves; ids are validated and capped. Replaces the existing set.
+function setWineTags(wineId, ownerId, taggedRaw, wineName) {
+  if (taggedRaw === undefined || taggedRaw === null) return;   // field omitted → leave tags as-is
+  const ids = [...new Set(String(taggedRaw)
+    .split(',').map(s => parseInt(s.trim(), 10)).filter(n => n && n !== ownerId))].slice(0, 20);
+  // Only allow tagging public users, or private users who approved the tagger
+  // (the tagger follows them). Silently drop anyone else.
+  const valid = ids.filter(id => db.prepare(`
+    SELECT 1 FROM users
+    WHERE id = ? AND (is_private = 0 OR id IN (SELECT following_id FROM follows WHERE follower_id = ?))
+  `).get(id, ownerId));
+  const before = new Set(db.prepare('SELECT user_id FROM wine_tags WHERE wine_id = ?').all(wineId).map(r => r.user_id));
+  db.prepare('DELETE FROM wine_tags WHERE wine_id = ?').run(wineId);
+  const ins = db.prepare('INSERT OR IGNORE INTO wine_tags (wine_id, user_id) VALUES (?, ?)');
+  for (const id of valid) {
+    ins.run(wineId, id);
+    if (!before.has(id)) {   // only notify the newly-added
+      db.prepare("INSERT INTO notifications (user_id, actor_id, type, wine_id, wine_name) VALUES (?,?,'tag',?,?)")
+        .run(id, ownerId, wineId, wineName);
+      wsPush(id, 'notification', { type: 'tag' });
+    }
+  }
+}
 
 // Public share — no login needed, but private wines stay private.
 // Two resolvers: the pretty /@username/<slug> form and the legacy /:id form.
@@ -71,6 +101,7 @@ router.get('/api/wines/discover', (req, res) => {
 
   let where = `
     w.is_private = 0
+    AND u.is_private = 0
     AND w.user_id != ?
     AND w.id NOT IN (SELECT wine_id FROM swipes WHERE user_id = ?)
   `;
@@ -78,6 +109,7 @@ router.get('/api/wines/discover', (req, res) => {
 
   if (vibe?.types)     { where += ` AND w.type IN (${vibe.types.map(() => '?').join(',')})`; params.push(...vibe.types); }
   if (vibe?.minRating) { where += ` AND w.rating >= ?`; params.push(vibe.minRating); }
+  if (req.query.green === '1') where += ` AND (w.is_biodynamic = 1 OR w.is_organic = 1)`;
 
   // Photo cards swipe better — float them to the top of the deck
   const order = vibe?.random ? 'RANDOM()' : '(w.image_path IS NULL), w.created_at DESC';
@@ -118,7 +150,7 @@ router.get('/api/wines/recommended', (req, res) => {
            w.image_path, w.location, w.grapes, u.username,
            (SELECT COUNT(*) FROM likes l WHERE l.wine_id = w.id) AS like_count
     FROM wines w JOIN users u ON u.id = w.user_id
-    WHERE w.is_private = 0 AND w.user_id != ?
+    WHERE w.is_private = 0 AND u.is_private = 0 AND w.user_id != ?
       AND w.id NOT IN (SELECT wine_id FROM swipes WHERE user_id = ?)
     ORDER BY w.created_at DESC
     LIMIT 200
@@ -178,14 +210,13 @@ router.post('/api/wines/:id/swipe', requireAuth, (req, res) => {
 
 // Trending — most liked + commented wines this week, fallback to all-time
 router.get('/api/wines/trending', (req, res) => {
-  const uid = flagUid(req);
-  const viewerId = req.user?.id || 0;
+  const { uid, viewerId } = viewerIds(req);
 
   const base = `
     ${wineCardSelect(uid).replace('NULL AS reposted_by', `COUNT(DISTINCT l.user_id) + COUNT(DISTINCT c.id) AS score, NULL AS reposted_by`)}
     ${wineCardJoins(uid)}
   `;
-  const privacy = `(w.is_private = 0 OR w.user_id = ${viewerId})`;
+  const privacy = visibleWines(viewerId);
 
   let trendWindow = 'this week';
   let wines = db.prepare(`${base}
@@ -213,14 +244,13 @@ router.get('/api/wines/trending', (req, res) => {
 router.get('/api/wines/bottle', (req, res) => {
   const { name, winery } = req.query;
   if (!name) return res.status(400).json({ error: 'name required' });
-  const uid = flagUid(req);
-  const viewerId = req.user?.id || 0;
+  const { uid, viewerId } = viewerIds(req);
 
   const wines = db.prepare(`
     ${wineCardSelect(uid)}
     ${wineCardJoins(uid)}
     WHERE w.name = ? AND (? IS NULL OR ? = '' OR w.winery = ?)
-      AND (w.is_private = 0 OR w.user_id = ${viewerId})
+      AND ${visibleWines(viewerId)}
     GROUP BY w.id
     ORDER BY w.created_at DESC
   `).all(name, winery || '', winery || '', winery || '');
@@ -257,12 +287,18 @@ router.get('/api/wines/bottle', (req, res) => {
 // Main feed — explore (taste-boosted), following, or one user's journal
 router.get('/api/wines', (req, res) => {
   const { search, type, userId, feed, vintage, region, winery, grapes } = req.query;
-  const uid = flagUid(req);
-  const viewerId = req.user?.id || 0;
+  const { uid, viewerId } = viewerIds(req);
+
+  // Pagination for the scrolling feed. A user's own journal (userId=…) is NOT
+  // paginated — the Profile and Wine Passport need the whole set at once.
+  const limit  = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 50);
+  const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+  const paginate = !userId;
 
   function facetClauses() {
     const clauses = [], vals = [];
     if (search)  { clauses.push('(w.name LIKE ? OR w.winery LIKE ? OR w.grapes LIKE ? OR w.location LIKE ? OR CAST(w.vintage AS TEXT) LIKE ? OR w.notes LIKE ? OR u.username LIKE ?)'); vals.push(...Array(7).fill(`%${search}%`)); }
+    if (req.query.green === '1') clauses.push('(w.is_biodynamic = 1 OR w.is_organic = 1)');
     if (type && type !== 'All') { clauses.push('w.type = ?'); vals.push(type); }
     if (vintage) { clauses.push('CAST(w.vintage AS TEXT) LIKE ?'); vals.push(`%${vintage}%`); }
     if (region)  { clauses.push('w.location LIKE ?'); vals.push(`%${region}%`); }
@@ -276,12 +312,13 @@ router.get('/api/wines', (req, res) => {
     const { clause: searchClause, vals: searchParams } = facetClauses();
 
     const baseSelect = `
-      SELECT w.*, u.username, u.avatar_path,
+      SELECT w.*, u.username, u.avatar_path, u.is_ambassador,
              COUNT(DISTINCT l.user_id)  AS like_count,
              COUNT(DISTINCT c.id)       AS comment_count,
              MAX(CASE WHEN l2.user_id = ${uid} THEN 1 ELSE 0 END) AS user_liked,
              COUNT(DISTINCT rp.user_id) AS repost_count,
-             MAX(CASE WHEN rp2.user_id = ${uid} THEN 1 ELSE 0 END) AS user_reposted
+             MAX(CASE WHEN rp2.user_id = ${uid} THEN 1 ELSE 0 END) AS user_reposted,
+             ${TAGGED_SQL}
     `;
     const baseJoins = wineCardJoins(uid);
 
@@ -289,7 +326,7 @@ router.get('/api/wines', (req, res) => {
       ${baseSelect}, NULL AS reposted_by, w.created_at AS feed_date
       ${baseJoins}
       WHERE (w.user_id = ${uid} OR w.user_id IN (SELECT following_id FROM follows WHERE follower_id = ${uid}))
-        AND (w.is_private = 0 OR w.user_id = ${viewerId})
+        AND ${visibleWines(viewerId)}
       ${searchClause}
       GROUP BY w.id
     `;
@@ -302,24 +339,25 @@ router.get('/api/wines', (req, res) => {
       WHERE (rpost.user_id = ${uid} OR rpost.user_id IN (SELECT following_id FROM follows WHERE follower_id = ${uid}))
         AND w.user_id != ${uid}
         AND w.user_id NOT IN (SELECT following_id FROM follows WHERE follower_id = ${uid})
-        AND (w.is_private = 0 OR w.user_id = ${viewerId})
+        AND ${visibleWines(viewerId)}
       ${searchClause}
       GROUP BY rpost.id
     `;
 
-    const sql = `SELECT * FROM (${part1} UNION ALL ${part2}) ORDER BY feed_date DESC`;
-    return res.json(db.prepare(sql).all(...searchParams, ...searchParams));
+    const sql = `SELECT * FROM (${part1} UNION ALL ${part2}) ORDER BY feed_date DESC LIMIT ? OFFSET ?`;
+    return res.json(db.prepare(sql).all(...searchParams, ...searchParams, limit, offset));
   }
 
   const { clause: facetClause, vals: facetParams } = facetClauses();
   // taste_boost: posts matching the viewer's taste tags float up in Explore
   let sql = `
-    SELECT w.*, u.username, u.avatar_path,
+    SELECT w.*, u.username, u.avatar_path, u.is_ambassador,
            COUNT(DISTINCT l.user_id)  AS like_count,
            COUNT(DISTINCT c.id)       AS comment_count,
            MAX(CASE WHEN l2.user_id = ${uid} THEN 1 ELSE 0 END) AS user_liked,
            COUNT(DISTINCT rp.user_id) AS repost_count,
            MAX(CASE WHEN rp2.user_id = ${uid} THEN 1 ELSE 0 END) AS user_reposted,
+           ${TAGGED_SQL},
            NULL AS reposted_by,
            (
              (SELECT COUNT(*) FROM taste_tags tt
@@ -329,13 +367,14 @@ router.get('/api/wines', (req, res) => {
                  AND w.grapes LIKE '%' || tt.tag_value || '%')
            ) AS taste_boost
     ${wineCardJoins(uid)}
-    WHERE (w.is_private = 0 OR w.user_id = ${viewerId})${facetClause}
+    WHERE ${visibleWines(viewerId)}${facetClause}
   `;
   const params = [...facetParams];
   if (userId) { sql += ' AND w.user_id = ?'; params.push(userId); }
   sql += userId
     ? ' GROUP BY w.id ORDER BY w.created_at DESC'
     : ' GROUP BY w.id ORDER BY taste_boost DESC, w.created_at DESC';
+  if (paginate) { sql += ' LIMIT ? OFFSET ?'; params.push(limit, offset); }
 
   res.json(db.prepare(sql).all(...params));
 });
@@ -343,8 +382,7 @@ router.get('/api/wines', (req, res) => {
 // Universal search — users / wineries / grapes / regions / posts in one call
 router.get('/api/search', (req, res) => {
   const q   = (req.query.q || '').trim();
-  const uid = flagUid(req);
-  const viewerId = req.user?.id || 0;
+  const { uid, viewerId } = viewerIds(req);
 
   if (!q) return res.json({ users: [], wineries: [], grapes: [], regions: [], posts: [] });
   const like = `%${q}%`;
@@ -381,7 +419,7 @@ router.get('/api/search', (req, res) => {
     ${wineCardJoins(uid)}
     WHERE (w.name LIKE ? OR w.winery LIKE ? OR w.grapes LIKE ? OR w.location LIKE ?
            OR CAST(w.vintage AS TEXT) LIKE ? OR w.notes LIKE ? OR u.username LIKE ?)
-      AND (w.is_private = 0 OR w.user_id = ${viewerId})
+      AND ${visibleWines(viewerId)}
     GROUP BY w.id
     ORDER BY w.created_at DESC
     LIMIT 20
@@ -394,10 +432,9 @@ router.get('/api/search', (req, res) => {
 router.get('/api/winery', (req, res) => {
   const { name } = req.query;
   if (!name) return res.status(400).json({ error: 'name required' });
-  const uid = flagUid(req);
-  const viewerId = req.user?.id || 0;
-  const privacy = `AND (is_private = 0 OR user_id = ${viewerId})`;
-  const privacyW = `AND (w.is_private = 0 OR w.user_id = ${viewerId})`;
+  const { uid, viewerId } = viewerIds(req);
+  const privacy = `AND ${visibleWinesNoJoin(viewerId)}`;
+  const privacyW = `AND ${visibleWines(viewerId)}`;
 
   const stats = db.prepare(`
     SELECT COUNT(*) AS review_count, ROUND(AVG(rating), 1) AS avg_rating,
@@ -514,8 +551,11 @@ router.post('/api/wines', requireAuth, wineUpload.single('image'), async (req, r
     focal_h != null ? parseFloat(focal_h) : 87,
     openedDate, slug, privateFlag
   );
+  // "Tasted with" tags (+ notify those users)
+  setWineTags(r.lastInsertRowid, userId, req.body.tagged, name);
   const wine = db.prepare(`
-    SELECT w.*, u.username, u.avatar_path, 0 AS like_count, 0 AS comment_count, 0 AS user_liked
+    SELECT w.*, u.username, u.avatar_path, u.is_ambassador, 0 AS like_count, 0 AS comment_count, 0 AS user_liked,
+           ${TAGGED_SQL}
     FROM wines w JOIN users u ON w.user_id = u.id WHERE w.id = ?
   `).get(r.lastInsertRowid);
 
@@ -584,12 +624,15 @@ router.patch('/api/wines/:id', requireAuth, wineUpload.single('image'), async (r
     opened_at || existing.opened_at || new Date().toISOString().slice(0, 10),
     id
   );
+  // Update "tasted with" tags (only if the field was sent)
+  setWineTags(Number(id), req.user.id, req.body.tagged, name || existing.name);
 
   const wine = db.prepare(`
-    SELECT w.*, u.username, u.avatar_path,
+    SELECT w.*, u.username, u.avatar_path, u.is_ambassador,
       COUNT(DISTINCT l.user_id) AS like_count,
       COUNT(DISTINCT c.id)      AS comment_count,
-      0 AS user_liked
+      0 AS user_liked,
+      ${TAGGED_SQL}
     FROM wines w
     JOIN users u ON w.user_id = u.id
     LEFT JOIN likes l    ON l.wine_id = w.id

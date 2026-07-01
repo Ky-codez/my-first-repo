@@ -159,7 +159,7 @@ export default function LegalPage({ page, onBack }) {
         <div className="legal-content">
           {page === 'privacy' ? <Privacy /> : <Terms />}
         </div>
-        <p className="legal-footer-note">🍷 Sipiary · please enjoy wine responsibly</p>
+        <p className="legal-footer-note">Sipiary · please enjoy wine responsibly</p>
       </div>
     </div>
   );

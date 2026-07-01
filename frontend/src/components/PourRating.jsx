@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { PencilSimple } from '@phosphor-icons/react';
 
 // Liquid colors per wine type — the glass pours what you're rating
 const LIQUID = {
@@ -146,7 +147,7 @@ export default function PourRating({ value, onChange, wineType = 'Red' }) {
             <span className="pour-score" style={{ color: shown > 0 ? c1 : 'var(--text-dim)' }}>
               {shown > 0 ? shown.toFixed(1) : '—'}
             </span>
-            <span className="pour-edit-icon">✏️</span>
+            <span className="pour-edit-icon"><PencilSimple size={14} /></span>
           </button>
         )}
         <span className="pour-hint">

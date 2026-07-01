@@ -4,6 +4,7 @@
  * again. "No" shows a polite block screen instead of letting them in.
  */
 import { useState } from 'react';
+import { WineTypeIcon } from './wineIcons.jsx';
 
 export default function AgeGate({ onConfirm }) {
   const [denied, setDenied] = useState(false);
@@ -17,7 +18,7 @@ export default function AgeGate({ onConfirm }) {
     return (
       <div className="age-gate">
         <div className="age-gate-box">
-          <div className="age-gate-logo">🍷</div>
+          <div className="age-gate-logo"><WineTypeIcon type="Red" size={48} /></div>
           <h1 className="age-gate-title">Come back soon</h1>
           <p className="age-gate-text">
             Sorry — you must be of legal drinking age to use Sipiary. Please
@@ -34,7 +35,7 @@ export default function AgeGate({ onConfirm }) {
   return (
     <div className="age-gate">
       <div className="age-gate-box">
-        <div className="age-gate-logo">🍷</div>
+        <div className="age-gate-logo"><WineTypeIcon type="Red" size={48} /></div>
         <h1 className="age-gate-title">Welcome to Sipiary</h1>
         <p className="age-gate-sub">Wine, your way — track it, discover it, share it</p>
         <p className="age-gate-text">
@@ -43,7 +44,7 @@ export default function AgeGate({ onConfirm }) {
         </p>
         <p className="age-gate-question">Are you of legal drinking age?</p>
         <div className="age-gate-actions">
-          <button className="age-gate-primary" onClick={confirm}>Yes, enter 🍷</button>
+          <button className="age-gate-primary" onClick={confirm}>Yes, enter</button>
           <button className="age-gate-secondary" onClick={() => setDenied(true)}>No, I'm not</button>
         </div>
         <p className="age-gate-fine">

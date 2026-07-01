@@ -2,31 +2,28 @@ import { useState, useEffect, useRef } from 'react';
 import WineCard from './WineCard.jsx';
 import SkeletonCard from './SkeletonCard.jsx';
 import TrendingCoverflow from './TrendingCoverflow.jsx';
+import { Wine, Couch, Confetti, Heart, SunHorizon, Diamond, DiceFive, MagnifyingGlass, MapPin, Sparkle, Star, Plant } from '@phosphor-icons/react';
+import { WineTypeIcon } from './wineIcons.jsx';
 
 const API = '';
 const RECENT_KEY = 'sipiary_recent_searches';
 const EMPTY = { users: [], wineries: [], grapes: [], regions: [], posts: [] };
 
 const VIBES = [
-  { key: null,       emoji: '🍇', label: 'All vibes'      },
-  { key: 'cozy',     emoji: '🛋️', label: 'Cozy night'     },
-  { key: 'party',    emoji: '🎉', label: 'Pre-game'       },
-  { key: 'date',     emoji: '🥂', label: 'Date night'     },
-  { key: 'sunset',   emoji: '🌅', label: 'Golden hour'    },
-  { key: 'fancy',    emoji: '💎', label: 'Treat yourself' },
-  { key: 'surprise', emoji: '🎲', label: 'Surprise me'    },
+  { key: null,       Icon: Wine,       label: 'All vibes'      },
+  { key: 'cozy',     Icon: Couch,      label: 'Cozy night'     },
+  { key: 'party',    Icon: Confetti,   label: 'Pre-game'       },
+  { key: 'date',     Icon: Heart,      label: 'Date night'     },
+  { key: 'sunset',   Icon: SunHorizon, label: 'Golden hour'    },
+  { key: 'fancy',    Icon: Diamond,    label: 'Treat yourself' },
+  { key: 'surprise', Icon: DiceFive,   label: 'Surprise me'    },
 ];
 
-const BURST_EMOJIS = ['🍷', '✨', '💜', '🍇', '🥂', '⭐'];
-
-const WINE_TYPE_EMOJI = {
-  Red: '🍷', White: '🥂', 'Rosé': '🌸', Sparkling: '✨',
-  Champagne: '🍾', Dessert: '🍯', Fortified: '🏺', Spirit: '🥃',
-};
+const BURST_ICONS = [Wine, Sparkle, Heart, Star, Diamond, Confetti];
 
 function EmojiBurst({ burstId }) {
   const pieces = Array.from({ length: 8 }, (_, i) => ({
-    emoji: BURST_EMOJIS[Math.floor(Math.random() * BURST_EMOJIS.length)],
+    Icon: BURST_ICONS[Math.floor(Math.random() * BURST_ICONS.length)],
     angle: (i / 8) * 360 + Math.random() * 30,
     dist:  90 + Math.random() * 70,
     delay: Math.random() * 0.1,
@@ -39,7 +36,7 @@ function EmojiBurst({ burstId }) {
           className="vd-burst-piece"
           style={{ '--angle': `${p.angle}deg`, '--dist': `${p.dist}px`, animationDelay: `${p.delay}s` }}
         >
-          {p.emoji}
+          <p.Icon size={20} weight="fill" color="#b06fd6" />
         </span>
       ))}
     </div>
@@ -77,6 +74,7 @@ export default function DiscoverPage({ currentUser, onUserClick, onWineClick, on
 
   // ── Vibe state ──
   const [vibe,    setVibe]    = useState(null);
+  const [green,   setGreen]   = useState(false);   // natural-wine (organic/biodynamic) filter
   const [cards,   setCards]   = useState(null);
   const [topIdx,  setTopIdx]  = useState(0);
   const [drag,    setDrag]    = useState(null);
@@ -132,13 +130,14 @@ export default function DiscoverPage({ currentUser, onUserClick, onWineClick, on
     setCards(null); setTopIdx(0);
     const params = new URLSearchParams({ userId: currentUser?.id || 0 });
     if (v) params.append('vibe', v);
+    if (green) params.append('green', '1');
     fetch(`${API}/api/wines/discover?${params}`)
       .then(r => r.json())
       .then(d => setCards(Array.isArray(d) ? d : []))
       .catch(() => setCards([]));
   };
 
-  useEffect(() => { loadDeck(vibe); }, [vibe]);
+  useEffect(() => { loadDeck(vibe); /* eslint-disable-next-line */ }, [vibe, green]);
   useEffect(() => () => clearTimeout(toastTimer.current), []);
 
   const showToast = (msg) => {
@@ -159,7 +158,7 @@ export default function DiscoverPage({ currentUser, onUserClick, onWineClick, on
       .then(d => {
         if (direction === 'right') {
           setBurstId(b => b + 1);
-          showToast(d.savedToWishlist ? '🍷 Added to your wishlist!' : '🍷 Noted — you have taste');
+          showToast(d.savedToWishlist ? 'Added to your wishlist!' : 'Noted — you have taste');
         }
       })
       .catch(() => {});
@@ -213,7 +212,7 @@ export default function DiscoverPage({ currentUser, onUserClick, onWineClick, on
     <div className="discover-page">
       {/* Search bar — always visible */}
       <div className="discover-search-bar">
-        <span className="discover-search-icon">🔍</span>
+        <span className="discover-search-icon"><MagnifyingGlass size={18} /></span>
         <input
           ref={inputRef}
           className="discover-search-input"
@@ -233,7 +232,7 @@ export default function DiscoverPage({ currentUser, onUserClick, onWineClick, on
             <div className="discover-recs">
               {recs.tonight && (
                 <button className="rec-tonight" onClick={() => onWineClick?.({ name: recs.tonight.name, winery: recs.tonight.winery })}>
-                  <span className="rec-tonight-eyebrow">🍷 Tonight, try</span>
+                  <span className="rec-tonight-eyebrow"><WineTypeIcon type="Red" size={14} /> Tonight, try</span>
                   <span className="rec-tonight-name">{recs.tonight.name}</span>
                   <span className="rec-tonight-meta">
                     {[recs.tonight.winery, recs.tonight.type].filter(Boolean).join(' · ')}
@@ -250,7 +249,7 @@ export default function DiscoverPage({ currentUser, onUserClick, onWineClick, on
                   <div className="rec-row">
                     {recs.wines.slice(1).map(w => (
                       <button key={w.id} className="rec-chip" onClick={() => onWineClick?.({ name: w.name, winery: w.winery })}>
-                        <span className="rec-chip-name">{WINE_TYPE_EMOJI[w.type] || '🍷'} {w.name}</span>
+                        <span className="rec-chip-name"><WineTypeIcon type={w.type} size={15} /> {w.name}</span>
                         {w.reason && <span className="rec-chip-reason">{w.reason}</span>}
                       </button>
                     ))}
@@ -281,13 +280,20 @@ export default function DiscoverPage({ currentUser, onUserClick, onWineClick, on
               onPointerUp={chipsUp}
               onPointerCancel={chipsUp}
             >
+              <button
+                className={`vd-vibe-chip vd-green-chip${green ? ' active' : ''}`}
+                onClick={() => setGreen(g => !g)}
+                aria-pressed={green}
+              >
+                <Plant size={15} weight="fill" style={{ verticalAlign: '-0.18em' }} /> Natural
+              </button>
               {VIBES.map(v => (
                 <button
                   key={v.label}
                   className={`vd-vibe-chip${vibe === v.key ? ' active' : ''}`}
                   onClick={() => setVibe(v.key)}
                 >
-                  {v.emoji} {v.label}
+                  <v.Icon size={15} weight="fill" style={{ verticalAlign: '-0.18em' }} /> {v.label}
                 </button>
               ))}
             </div>
@@ -308,7 +314,7 @@ export default function DiscoverPage({ currentUser, onUserClick, onWineClick, on
 
             {deckEmpty && (
               <div className="vd-empty">
-                <span className="vd-empty-emoji">🍇</span>
+                <span className="vd-empty-emoji"><Wine size={40} weight="fill" color="#b06fd6" /></span>
                 <p>{vibe ? "That's every bottle for this vibe." : "You've seen every bottle for now."}</p>
                 <p className="vd-empty-sub">
                   {vibe
@@ -316,7 +322,7 @@ export default function DiscoverPage({ currentUser, onUserClick, onWineClick, on
                     : 'Check back as friends log more wines.'}
                 </p>
                 <div className="vd-empty-actions">
-                  {vibe && <button className="vd-refresh-btn primary" onClick={() => setVibe(null)}>🍇 Show all wines</button>}
+                  {vibe && <button className="vd-refresh-btn primary" onClick={() => setVibe(null)}><Wine size={15} weight="fill" style={{ verticalAlign: '-0.18em' }} /> Show all wines</button>}
                   <button className="vd-refresh-btn" onClick={() => loadDeck(vibe)}>↻ Check again</button>
                 </div>
               </div>
@@ -347,15 +353,15 @@ export default function DiscoverPage({ currentUser, onUserClick, onWineClick, on
                     ? <img className="vd-card-img" src={`${API}${wine.image_path}`} alt="" draggable="false" decoding="async" />
                     : <div className={`vd-card-placeholder vd-ph-${(wine.type || 'Red').toLowerCase().replace(/[^a-z]/g, '')}`}>
                         <span className="vd-ph-emoji">
-                          {{ Red: '🍷', White: '🥂', 'Rosé': '🌸', Sparkling: '✨', Champagne: '🍾', Dessert: '🍯', Fortified: '🏺', Spirit: '🥃' }[wine.type] || '🍷'}
+                          <WineTypeIcon type={wine.type} size={56} />
                         </span>
                       </div>
                   }
                   <div className="vd-card-shade" />
                   {isTop && (
                     <>
-                      <span className="vd-stamp vd-stamp-like" style={{ opacity: likeOpacity }}>I'D DRINK THIS 🍷</span>
-                      <span className="vd-stamp vd-stamp-pass" style={{ opacity: passOpacity }}>PASS 👋</span>
+                      <span className="vd-stamp vd-stamp-like" style={{ opacity: likeOpacity }}>I'D DRINK THIS</span>
+                      <span className="vd-stamp vd-stamp-pass" style={{ opacity: passOpacity }}>PASS</span>
                     </>
                   )}
                   <div className="vd-card-info">
@@ -364,7 +370,7 @@ export default function DiscoverPage({ currentUser, onUserClick, onWineClick, on
                     <div className="vd-card-tags">
                       <span className="vd-tag">{wine.type}</span>
                       {wine.rating   ? <span className="vd-tag">★ {Number(wine.rating).toFixed(1)}</span> : null}
-                      {wine.like_count > 0 && <span className="vd-tag">❤️ {wine.like_count}</span>}
+                      {wine.like_count > 0 && <span className="vd-tag"><Heart size={12} weight="fill" style={{ verticalAlign: '-0.1em' }} /> {wine.like_count}</span>}
                     </div>
                     {wine.notes && !wine.notes.startsWith('{') && (
                       <p className="vd-card-notes">"{wine.notes}"</p>
@@ -382,7 +388,7 @@ export default function DiscoverPage({ currentUser, onUserClick, onWineClick, on
           {!deckEmpty && cards !== null && cards.length > 0 && (
             <div className="vd-actions">
               <button className="vd-action-btn vd-pass" onClick={() => swipe('left')} title="Pass">✕</button>
-              <button className="vd-action-btn vd-like" onClick={() => swipe('right')} title="I'd drink this">🍷</button>
+              <button className="vd-action-btn vd-like" onClick={() => swipe('right')} title="I'd drink this"><WineTypeIcon type="Red" size={24} /></button>
             </div>
           )}
 
@@ -397,7 +403,7 @@ export default function DiscoverPage({ currentUser, onUserClick, onWineClick, on
 
           {noResults && (
             <div className="search-empty-hint">
-              <p>🍷 Nothing found for "{query.trim()}"</p>
+              <p><WineTypeIcon type="Red" size={16} /> Nothing found for "{query.trim()}"</p>
               <p className="sehp-sub">Try a different spelling or a shorter word.</p>
             </div>
           )}
@@ -423,7 +429,7 @@ export default function DiscoverPage({ currentUser, onUserClick, onWineClick, on
               <span className="sr-section-title">Wineries</span>
               {results.wineries.map(w => (
                 <button key={w.name} className="sr-row" onClick={() => { saveRecent(query.trim()); onWineryClick(w.name); }}>
-                  <span className="sr-row-icon">🍷</span>
+                  <span className="sr-row-icon"><WineTypeIcon type="Red" size={16} /></span>
                   <span className="sr-row-label">{w.name}</span>
                   <span className="sr-row-count">{w.post_count} {w.post_count === 1 ? 'post' : 'posts'}</span>
                   <span className="sr-row-arrow">›</span>
@@ -439,7 +445,7 @@ export default function DiscoverPage({ currentUser, onUserClick, onWineClick, on
                   <span className="sr-section-title">Grapes</span>
                   <div className="sr-chips">
                     {results.grapes.map(g => (
-                      <button key={g} className="sr-chip sr-chip-grape" onClick={() => { saveRecent(g); setQuery(g); }}>🍇 {g}</button>
+                      <button key={g} className="sr-chip sr-chip-grape" onClick={() => { saveRecent(g); setQuery(g); }}>{g}</button>
                     ))}
                   </div>
                 </>
@@ -449,7 +455,7 @@ export default function DiscoverPage({ currentUser, onUserClick, onWineClick, on
                   <span className="sr-section-title">Regions</span>
                   <div className="sr-chips">
                     {results.regions.map(r => (
-                      <button key={r.name} className="sr-chip sr-chip-region" onClick={() => { saveRecent(r.name); setQuery(r.name); }}>📍 {r.name}</button>
+                      <button key={r.name} className="sr-chip sr-chip-region" onClick={() => { saveRecent(r.name); setQuery(r.name); }}><MapPin size={13} weight="fill" style={{ verticalAlign: '-0.12em' }} /> {r.name}</button>
                     ))}
                   </div>
                 </>
@@ -488,7 +494,7 @@ export default function DiscoverPage({ currentUser, onUserClick, onWineClick, on
             </div>
             {recent.map(term => (
               <div key={term} className="sr-row sr-row-recent" onClick={() => setQuery(term)}>
-                <span className="sr-row-icon">🍷</span>
+                <span className="sr-row-icon"><MagnifyingGlass size={16} /></span>
                 <span className="sr-row-label">{term}</span>
                 <button className="sr-row-remove" onClick={e => { e.stopPropagation(); removeRecent(term); }}>×</button>
               </div>
