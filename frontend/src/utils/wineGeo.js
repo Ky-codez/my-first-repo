@@ -6,6 +6,21 @@ import { regionFlag } from './regionFlags.js';
 // Famous wine regions (key = lowercase substring to match in a location string).
 export const REGIONS = {
   'bordeaux': [44.84, -0.58, 'Bordeaux', 'France'],
+  // Bordeaux appellations — famous French regions in their own right. Without
+  // these, "Pomerol" etc. fall back to the France country centroid (which reads
+  // as a lone dot in central France, nowhere near Bordeaux).
+  'pomerol': [44.93, -0.20, 'Pomerol', 'France'],
+  'saint-émilion': [44.89, -0.16, 'Saint-Émilion', 'France'],
+  'saint emilion': [44.89, -0.16, 'Saint-Émilion', 'France'],
+  'st-émilion': [44.89, -0.16, 'Saint-Émilion', 'France'],
+  'médoc': [45.42, -0.90, 'Médoc', 'France'],
+  'medoc': [45.42, -0.90, 'Médoc', 'France'],
+  'pauillac': [45.20, -0.75, 'Pauillac', 'France'],
+  'margaux': [45.04, -0.67, 'Margaux', 'France'],
+  'saint-julien': [45.16, -0.75, 'Saint-Julien', 'France'],
+  'saint julien': [45.16, -0.75, 'Saint-Julien', 'France'],
+  'graves': [44.72, -0.35, 'Graves', 'France'],
+  'sauternes': [44.53, -0.32, 'Sauternes', 'France'],
   'burgundy': [47.05, 4.85, 'Burgundy', 'France'],
   'bourgogne': [47.05, 4.85, 'Burgundy', 'France'],
   'champagne': [49.05, 4.0, 'Champagne', 'France'],

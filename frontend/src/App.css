@@ -1402,8 +1402,10 @@ body { -webkit-overflow-scrolling: touch; }
 .passport-globe { width: 100%; height: clamp(260px, 48vh, 420px); border-radius: 16px; overflow: hidden; touch-action: none; cursor: grab;
   background: radial-gradient(130% 100% at 50% 30%, #1a1030 0%, #0a0610 70%); position: relative; }
 .passport-loading { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 0.9rem; }
-.passport-card { margin-top: 0.8rem; background: var(--bg-card); border: 1px solid var(--border); border-radius: 14px; padding: 0.85rem 1rem; }
-.pc-head { display: flex; flex-direction: column; gap: 2px; margin-bottom: 0.6rem; }
+.passport-card { position: relative; margin-top: 0.8rem; margin-bottom: 5.5rem; background: var(--bg-card); border: 1px solid var(--border); border-radius: 14px; padding: 0.85rem 1rem; }
+.pc-close-x { position: absolute; top: 0.5rem; right: 0.6rem; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 50%; color: var(--text-muted); font-size: 1.3rem; line-height: 1; cursor: pointer; transition: color 0.15s, border-color 0.15s; }
+.pc-close-x:hover { color: var(--text); border-color: var(--text-muted); }
+.pc-head { display: flex; flex-direction: column; gap: 2px; margin-bottom: 0.6rem; padding-right: 2rem; }
 .pc-name { font-size: 1.1rem; font-weight: 800; color: var(--text); }
 .pc-sub { font-size: 0.78rem; color: var(--text-muted); }
 .pc-wines { display: flex; flex-direction: column; gap: 0.35rem; }

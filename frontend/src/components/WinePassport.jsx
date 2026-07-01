@@ -66,9 +66,11 @@ export default function WinePassport({ onBack, userId, onWineClick }) {
       const byCountry = new Map();   // canonCountry → { country, wines, count, total }
       const pins = [];               // famous regions → glowing dots
       const regionSet = new Set();
+      const tastedPts = [];          // every located wine's [lat,lng] → initial globe facing
       for (const w of wines) {
         const p = resolveLocation(w.location);
         if (!p) continue;
+        tastedPts.push([p.lat, p.lng]);
         if (p.kind === 'region') { regionSet.add(p.name); pins.push(p); }
         const cc = canon(p.country);
         if (!byCountry.has(cc)) byCountry.set(cc, { country: p.country, wines: [], count: 0, total: 0 });
@@ -107,11 +109,11 @@ export default function WinePassport({ onBack, userId, onWineClick }) {
         else if (geom.type === 'MultiPolygon') geom.coordinates.forEach(poly => poly.forEach(draw));
       };
       const paint = (highlightCanon) => {
-        cx.fillStyle = '#0c1330'; cx.fillRect(0, 0, CW, CH);          // ocean
+        cx.fillStyle = '#12224a'; cx.fillRect(0, 0, CW, CH);         // ocean (deep blue)
         for (const f of land.features) {
           const cc = canon(f.properties?.name);
           cx.fillStyle = cc === highlightCanon ? '#ffd76a'           // tapped → gold
-            : colorByCanon.get(cc) || '#3a4566';                     // tasted → vivid, else muted
+            : colorByCanon.get(cc) || '#5b6a92';                     // tasted → vivid, else muted land (lightened so the globe reads as land vs sea)
           drawFeature(f.geometry);
         }
         tex.needsUpdate = true;
@@ -132,6 +134,20 @@ export default function WinePassport({ onBack, userId, onWineClick }) {
       const globe = new THREE.Group(); scene.add(globe);
       const sphere = new THREE.Mesh(new THREE.SphereGeometry(1, 96, 96), new THREE.MeshBasicMaterial({ map: tex }));
       globe.add(sphere);
+
+      // Face the user's wines on load. Without this the globe opens on the empty
+      // Americas (all muted) and reads as "colourless" — the tasted countries are
+      // hidden on the far side. Circular-mean the tasted longitudes (handles the
+      // ±180° wrap) and spin the globe so that meridian faces the camera.
+      // Derivation: an unrotated point at longitude L sits at facing longitude
+      // -90°, so rotation.y = -(90° + L) brings L to the front.
+      const faceLng = tastedPts.length
+        ? Math.atan2(
+            tastedPts.reduce((s, [, lng]) => s + Math.sin(lng * Math.PI / 180), 0),
+            tastedPts.reduce((s, [, lng]) => s + Math.cos(lng * Math.PI / 180), 0),
+          ) * 180 / Math.PI
+        : 10;  // no wines yet → open on Europe, which just looks nicer than the Pacific
+      globe.rotation.y = -(90 + faceLng) * Math.PI / 180;
       globe.add(new THREE.Mesh(new THREE.SphereGeometry(1.16, 48, 48),
         new THREE.MeshBasicMaterial({ color: 0x6f9bd6, transparent: true, opacity: 0.12, side: THREE.BackSide })));
 
@@ -158,7 +174,11 @@ export default function WinePassport({ onBack, userId, onWineClick }) {
         ray.setFromCamera(m, camera);
         const hit = ray.intersectObject(sphere, false)[0];
         if (!hit) return;
-        const [lng, lat] = toLatLng(hit.point.clone().normalize());
+        // hit.point is WORLD space; the texture/country lookup lives in the
+        // globe's LOCAL frame, which is rotated (see globe.rotation.y). Convert
+        // back before inverting to lat/lng, or every tap lands a continent off.
+        const localHit = globe.worldToLocal(hit.point.clone()).normalize();
+        const [lng, lat] = toLatLng(localHit);
         const feat = land.features.find(f => inFeature(lng, lat, f.geometry));
         if (!feat) { setSelected(null); paint(null); return; }
         const cc = canon(feat.properties.name);
@@ -171,9 +191,12 @@ export default function WinePassport({ onBack, userId, onWineClick }) {
       renderer.domElement.addEventListener('pointerup', onUp);
 
       // Let the card drill-down zoom the globe to a region's coordinates.
+      // latLng() is in the globe's LOCAL frame; lift it to WORLD (the globe is
+      // rotated) so the camera flies to the right spot.
       focusRef.current = (lat, lng) => {
         controls.autoRotate = false;
-        focusTarget = latLng(lat, lng, 1, THREE).normalize().multiplyScalar(1.6);
+        const world = globe.localToWorld(latLng(lat, lng, 1, THREE));
+        focusTarget = world.normalize().multiplyScalar(1.6);
       };
 
       const animate = () => {
@@ -239,6 +262,9 @@ export default function WinePassport({ onBack, userId, onWineClick }) {
 
       {selected && (
         <div className="passport-card">
+          {/* Always-reachable close (the bottom one can fall behind the nav on a
+              tall card / small screen). */}
+          <button className="pc-close-x" onClick={() => setSelected(null)} aria-label="Close">×</button>
           {/* Header — shows the drill path (country › region) */}
           <div className="pc-head">
             {region ? (
