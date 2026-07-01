@@ -103,19 +103,64 @@ export default function WinePassport({ onBack, userId, onWineClick }) {
       const cv = document.createElement('canvas'); cv.width = CW; cv.height = CH;
       const cx = cv.getContext('2d');
       const px = (lng) => (lng + 180) / 360 * CW, py = (lat) => (90 - lat) / 180 * CH;
-      const draw = (ring) => { cx.beginPath(); ring.forEach(([lng, lat], i) => { const x = px(lng), y = py(lat); i ? cx.lineTo(x, y) : cx.moveTo(x, y); }); cx.closePath(); cx.fill(); };
+      const tracePath = (ring) => { ring.forEach(([lng, lat], i) => { const x = px(lng), y = py(lat); i ? cx.lineTo(x, y) : cx.moveTo(x, y); }); };
+      const draw = (ring) => { cx.beginPath(); tracePath(ring); cx.closePath(); cx.fill(); };
       const drawFeature = (geom) => {
         if (geom.type === 'Polygon') geom.coordinates.forEach(draw);           // each ring
         else if (geom.type === 'MultiPolygon') geom.coordinates.forEach(poly => poly.forEach(draw));
       };
+      const strokeFeature = (geom) => {
+        const rings = geom.type === 'Polygon' ? geom.coordinates
+          : geom.type === 'MultiPolygon' ? geom.coordinates.flat() : [];
+        for (const ring of rings) { cx.beginPath(); tracePath(ring); cx.closePath(); cx.stroke(); }
+      };
+      // Centroid of a polygon's outer ring.
+      const ringC = (ring) => { let x = 0, y = 0; for (const [lng, lat] of ring) { x += lng; y += lat; } return [x / ring.length, y / ring.length]; };
+      // A country's MAIN landmass (its largest polygon, by vertex count).
+      const mainCentroid = (geom) => {
+        if (geom.type === 'Polygon') return ringC(geom.coordinates[0]);
+        let best = geom.coordinates[0];
+        for (const p of geom.coordinates) if (p[0].length > best[0].length) best = p;
+        return ringC(best[0]);   // best is a polygon → its outer ring
+      };
+      // Fill only the polygons near `center` — skips far-flung overseas territories
+      // (e.g. French Guiana, which the dataset lumps into "France") so a tasted
+      // country doesn't bleed a stray colour blob onto another continent.
+      const drawNear = (geom, center, maxDeg) => {
+        const polys = geom.type === 'Polygon' ? [geom.coordinates] : geom.type === 'MultiPolygon' ? geom.coordinates : [];
+        for (const poly of polys) {
+          const [clng, clat] = ringC(poly[0]);
+          const dLng = Math.min(Math.abs(clng - center[0]), 360 - Math.abs(clng - center[0]));
+          if (Math.hypot(dLng, clat - center[1]) > maxDeg) continue;
+          poly.forEach(draw);
+        }
+      };
       const paint = (highlightCanon) => {
-        cx.fillStyle = '#12224a'; cx.fillRect(0, 0, CW, CH);         // ocean (deep blue)
+        // Ocean — a soft vertical gradient (deep at the poles, brighter at the
+        // equator) reads far more like a real planet than a flat fill.
+        const og = cx.createLinearGradient(0, 0, 0, CH);
+        og.addColorStop(0, '#071026'); og.addColorStop(0.5, '#12345f'); og.addColorStop(1, '#071026');
+        cx.fillStyle = og; cx.fillRect(0, 0, CW, CH);
+        // Faint graticule so it reads as a globe, not a disc.
+        cx.strokeStyle = 'rgba(130,170,220,0.07)'; cx.lineWidth = 1.5;
+        for (let lng = -180; lng <= 180; lng += 30) { cx.beginPath(); cx.moveTo(px(lng), 0); cx.lineTo(px(lng), CH); cx.stroke(); }
+        for (let lat = -60; lat <= 60; lat += 30) { cx.beginPath(); cx.moveTo(0, py(lat)); cx.lineTo(CW, py(lat)); cx.stroke(); }
+        // Pass 1 — every landmass in the muted earthy base tone.
+        cx.fillStyle = '#6b7360';
+        for (const f of land.features) drawFeature(f.geometry);
+        // Pass 2 — tasted/tapped countries in vivid colour, but only their
+        // mainland (drawNear skips detached overseas territories, so e.g. France
+        // no longer paints a red blob over French Guiana next to Brazil).
         for (const f of land.features) {
           const cc = canon(f.properties?.name);
-          cx.fillStyle = cc === highlightCanon ? '#ffd76a'           // tapped → gold
-            : colorByCanon.get(cc) || '#5b6a92';                     // tasted → vivid, else muted land (lightened so the globe reads as land vs sea)
-          drawFeature(f.geometry);
+          const vivid = cc === highlightCanon ? '#ffd76a' : colorByCanon.get(cc);
+          if (!vivid) continue;
+          cx.fillStyle = vivid;
+          drawNear(f.geometry, mainCentroid(f.geometry), 45);
         }
+        // Coastlines / borders — a thin dark outline crisps up every landmass.
+        cx.strokeStyle = 'rgba(6,12,24,0.55)'; cx.lineWidth = 1.3; cx.lineJoin = 'round';
+        for (const f of land.features) strokeFeature(f.geometry);
         tex.needsUpdate = true;
       };
 
@@ -131,8 +176,26 @@ export default function WinePassport({ onBack, userId, onWineClick }) {
       const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
       paint(null);
 
+      // Lighting gives the sphere real volume (a lit face + shaded limb) instead
+      // of a flat disc. The sun follows the camera each frame (see animate) so
+      // the side you're looking at is always lit — no wines hide in the dark.
+      scene.add(new THREE.AmbientLight(0xffffff, 0.72));
+      const sun = new THREE.DirectionalLight(0xfff3e0, 0.85);
+      sun.position.copy(camera.position); scene.add(sun);
+
+      // Starfield behind the globe — a bit of depth against the dark panel.
+      const starN = 320, sp = new Float32Array(starN * 3);
+      for (let i = 0; i < starN; i++) {
+        const rr = 9 + Math.random() * 8, th = Math.random() * Math.PI * 2, ph = Math.acos(2 * Math.random() - 1);
+        sp[i * 3] = rr * Math.sin(ph) * Math.cos(th); sp[i * 3 + 1] = rr * Math.cos(ph); sp[i * 3 + 2] = rr * Math.sin(ph) * Math.sin(th);
+      }
+      const starGeo = new THREE.BufferGeometry(); starGeo.setAttribute('position', new THREE.BufferAttribute(sp, 3));
+      const stars = new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0xdfe8ff, size: 0.055, sizeAttenuation: true, transparent: true, opacity: 0.75 }));
+      scene.add(stars);
+
       const globe = new THREE.Group(); scene.add(globe);
-      const sphere = new THREE.Mesh(new THREE.SphereGeometry(1, 96, 96), new THREE.MeshBasicMaterial({ map: tex }));
+      const sphere = new THREE.Mesh(new THREE.SphereGeometry(1, 128, 128),
+        new THREE.MeshPhongMaterial({ map: tex, shininess: 12, specular: new THREE.Color(0x2a3f66) }));
       globe.add(sphere);
 
       // Face the user's wines on load. Without this the globe opens on the empty
@@ -148,14 +211,29 @@ export default function WinePassport({ onBack, userId, onWineClick }) {
           ) * 180 / Math.PI
         : 10;  // no wines yet → open on Europe, which just looks nicer than the Pacific
       globe.rotation.y = -(90 + faceLng) * Math.PI / 180;
-      globe.add(new THREE.Mesh(new THREE.SphereGeometry(1.16, 48, 48),
-        new THREE.MeshBasicMaterial({ color: 0x6f9bd6, transparent: true, opacity: 0.12, side: THREE.BackSide })));
 
-      // Region pins (small gold accents)
+      // Atmosphere — a fresnel rim glow (bright at the limb, fading inward) sells
+      // the "planet with an atmosphere" look far better than a flat halo sphere.
+      const atmo = new THREE.Mesh(
+        new THREE.SphereGeometry(1.22, 64, 64),
+        new THREE.ShaderMaterial({
+          transparent: true, side: THREE.BackSide, blending: THREE.AdditiveBlending, depthWrite: false,
+          uniforms: { glow: { value: new THREE.Color(0x5aa0e6) } },
+          vertexShader: 'varying vec3 vN; void main(){ vN = normalize(normalMatrix * normal); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
+          fragmentShader: 'uniform vec3 glow; varying vec3 vN; void main(){ float i = pow(0.62 - dot(vN, vec3(0.0,0.0,1.0)), 3.2); gl_FragColor = vec4(glow, 1.0) * clamp(i, 0.0, 1.0); }',
+        }),
+      );
+      scene.add(atmo);
+
+      // Region pins — a bright core plus a soft additive halo so tasted regions
+      // twinkle like map markers.
       for (const p of pins) {
-        const dot = new THREE.Mesh(new THREE.SphereGeometry(0.022, 12, 12),
-          new THREE.MeshBasicMaterial({ color: 0xfff0c0 }));
-        dot.position.copy(latLng(p.lat, p.lng, 1.012, THREE)); globe.add(dot);
+        const at = latLng(p.lat, p.lng, 1.012, THREE);
+        const dot = new THREE.Mesh(new THREE.SphereGeometry(0.02, 12, 12), new THREE.MeshBasicMaterial({ color: 0xffe9a8 }));
+        dot.position.copy(at); globe.add(dot);
+        const halo = new THREE.Mesh(new THREE.SphereGeometry(0.05, 16, 16),
+          new THREE.MeshBasicMaterial({ color: 0xffcf6a, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false }));
+        halo.position.copy(at); globe.add(halo);
       }
 
       controls = new OrbitControls(camera, renderer.domElement);
@@ -202,6 +280,8 @@ export default function WinePassport({ onBack, userId, onWineClick }) {
       const animate = () => {
         frame = requestAnimationFrame(animate);
         if (focusTarget) { camera.position.lerp(focusTarget, 0.08); if (camera.position.distanceTo(focusTarget) < 0.02) focusTarget = null; }
+        sun.position.copy(camera.position);        // keep the face you're looking at lit
+        stars.rotation.y += 0.0004;                // very slow drift for a touch of life
         controls.update(); renderer.render(scene, camera);
       };
       animate();
