@@ -1513,9 +1513,11 @@ body { -webkit-overflow-scrolling: touch; }
 .ddc-row  { display: flex; gap: 0.6rem; flex-wrap: wrap; }
 .ddc-pill { display: flex; align-items: center; gap: 0.5rem; border: 1px solid; border-radius: 10px; padding: 0.4rem 0.7rem; flex: 1; min-width: 140px; }
 .ddc-pill-emoji { font-size: 1.5rem; line-height: 1; }
-.ddc-pill-name  { font-size: 0.82rem; font-weight: 700; margin-bottom: 0.1rem; }
-.ddc-pill-sub   { font-size: 0.72rem; color: var(--text-muted); }
-.ddc-advice { font-size: 0.8rem; color: var(--text-warm); line-height: 1.55; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 0.6rem; }
+.ddc-pill-name  { font-size: 0.84rem; font-weight: 700; margin-bottom: 0.1rem; }
+/* Pills keep a dark bg in BOTH themes, so their text must stay light — theme
+   vars would go dark-brown in light mode (dark-on-dark, unreadable). */
+.ddc-pill-sub   { font-size: 0.78rem; color: #d4c0ab; }
+.ddc-advice { font-size: 0.85rem; color: var(--text-warm); line-height: 1.55; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 0.6rem; }
 
 /* Illumination bar */
 .illum-bar { position: relative; height: 8px; background: var(--bg-surface); border-radius: 4px; overflow: visible; }
@@ -1523,21 +1525,23 @@ body { -webkit-overflow-scrolling: touch; }
 .illum-label { position: absolute; right: 0; top: -1.4rem; font-size: 0.7rem; color: var(--text-muted); }
 
 /* Phase legend */
-.lunar-section-title { font-size: 0.75rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; font-weight: 600; }
+.lunar-section-title { font-size: 0.78rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; font-weight: 600; }
 .phase-legend { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.4rem; }
-.phase-legend-item { background: var(--bg-card); border: 1px solid var(--border-dim); border-radius: 8px; padding: 0.4rem 0.5rem; display: flex; align-items: center; gap: 0.4rem; }
+/* Always-dark chip: the pale moon-phase yellows are unreadable on a white
+   light-mode card, so keep the "night sky" bg in both themes. */
+.phase-legend-item { background: #17070b; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 0.4rem 0.5rem; display: flex; align-items: center; gap: 0.4rem; }
 .phase-legend-emoji { font-size: 1.1rem; }
-.phase-legend-name  { font-size: 0.7rem; font-weight: 600; }
+.phase-legend-name  { font-size: 0.74rem; font-weight: 700; }
 
 /* Ascending / descending legend */
 .asc-legend { display: flex; gap: 0.75rem; }
 .asc-legend-item { flex: 1; border: 1px solid; border-radius: 10px; padding: 0.75rem; display: flex; align-items: flex-start; gap: 0.6rem; }
-.asc-legend-name { font-size: 0.82rem; font-weight: 700; margin-bottom: 0.2rem; }
-.asc-legend-desc { font-size: 0.75rem; color: var(--text-warm); line-height: 1.4; }
+.asc-legend-name { font-size: 0.84rem; font-weight: 700; margin-bottom: 0.2rem; }
+.asc-legend-desc { font-size: 0.8rem; color: #e3ccb2; line-height: 1.45; }   /* dark bg in both themes */
 
 /* Day type legend pills */
 .lunar-legend { display: flex; flex-wrap: wrap; gap: 0.5rem; }
-.lunar-legend-item { display: flex; align-items: center; gap: 0.4rem; border: 1px solid; border-radius: 20px; padding: 0.25rem 0.75rem; font-size: 0.8rem; color: var(--text); }
+.lunar-legend-item { display: flex; align-items: center; gap: 0.4rem; border: 1px solid; border-radius: 20px; padding: 0.25rem 0.75rem; font-size: 0.8rem; color: #f0e6d6; }   /* dark bg in both themes */
 
 /* Month navigation */
 .lunar-month-nav { display: flex; align-items: center; justify-content: space-between; }
@@ -1547,7 +1551,7 @@ body { -webkit-overflow-scrolling: touch; }
 
 /* Calendar grid */
 .lunar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
-.lunar-wd   { text-align: center; font-size: 0.7rem; color: var(--text-dim); padding: 0.25rem 0; font-weight: 600; }
+.lunar-wd   { text-align: center; font-size: 0.72rem; color: var(--text-muted); padding: 0.25rem 0; font-weight: 600; }
 .lunar-day  {
   border: 1px solid transparent; border-radius: 8px; padding: 0.3rem 0.15rem;
   display: flex; flex-direction: column; align-items: center; gap: 1px;
@@ -1562,8 +1566,8 @@ body { -webkit-overflow-scrolling: touch; }
 /* Description cards */
 .lunar-desc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
 .lunar-desc-card { border: 1px solid; border-radius: 12px; padding: 1rem; position: relative; }
-.ldc-title { font-size: 0.88rem; font-weight: 700; margin-bottom: 0.35rem; }
-.ldc-body  { font-size: 0.78rem; color: var(--text-warm); line-height: 1.5; }
+.ldc-title { font-size: 0.9rem; font-weight: 700; margin-bottom: 0.35rem; }
+.ldc-body  { font-size: 0.82rem; color: #e3ccb2; line-height: 1.55; }   /* cards keep dark bg in both themes */
 .ldc-active { position: relative; }
 .ldc-active-badge { position: absolute; top: -10px; right: 10px; font-size: 0.68rem; font-weight: 700; color: #fff; padding: 0.15rem 0.55rem; border-radius: 20px; }
 

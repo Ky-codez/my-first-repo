@@ -175,12 +175,12 @@ export default function LunarCalendar({ onBack }) {
               }}
               onClick={() => setSelected(day)}
             >
-              <span className="ld-num"  style={{ color: (isT || isSel) ? typeInfo.color : '#c8b89a' }}>
+              <span className="ld-num"  style={{ color: (isT || isSel) ? typeInfo.color : '#e4d6bf' }}>
                 {day.getDate()}
               </span>
               <span className="ld-phase">{phaseInfo.emoji}</span>
               <span className="ld-type">{typeInfo.emoji}</span>
-              <span className="ld-asc"  style={{ color: info.ascending ? '#3498db' : '#9b59b6' }}>
+              <span className="ld-asc"  style={{ color: info.ascending ? '#54a8e8' : '#b478d4' }}>
                 {info.ascending ? '↑' : '↓'}
               </span>
             </div>

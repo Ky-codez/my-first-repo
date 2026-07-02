@@ -21,7 +21,7 @@ const ASCENDING_SIGNS = new Set([0, 1, 2, 8, 9, 10, 11]); // Aries-Gemini + Sag-
 export const TYPE_INFO = {
   fruit:  { label:'Fruit Day',  emoji:'🍇', color:'#e67e22', bg:'#1e0f00',
     desc:'Best day to open and taste wines. Fruit characters are most expressive and vibrant.' },
-  root:   { label:'Root Day',   emoji:'🌱', color:'#a0784a', bg:'#120a00',
+  root:   { label:'Root Day',   emoji:'🌱', color:'#c89a63', bg:'#120a00',
     desc:'Wines taste more closed, austere or earthy. Not recommended for important tastings.' },
   flower: { label:'Flower Day', emoji:'🌸', color:'#e91e8c', bg:'#1a0012',
     desc:'Floral aromas are most pronounced. Great for aromatic whites and elegant reds.' },
@@ -49,9 +49,9 @@ export const PHASE_INFO = {
 };
 
 export const ASCENDING_INFO = {
-  ascending:  { label:'Moon Ascending',  emoji:'↑', color:'#3498db',
+  ascending:  { label:'Moon Ascending',  emoji:'↑', color:'#54a8e8',
     desc:'Moon rising higher each night. Wine opens up — perfect for tasting and sharing.' },
-  descending: { label:'Moon Descending', emoji:'↓', color:'#9b59b6',
+  descending: { label:'Moon Descending', emoji:'↓', color:'#b478d4',
     desc:'Moon moving lower each night. Wine more closed — ideal for cellar work and racking.' },
 };
 
