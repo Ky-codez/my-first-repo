@@ -52,6 +52,24 @@ function WineImage({ src, fx, fy, fw, fh }) {
 }
 
 const API = '';
+
+// ─── Shared cellar cache ─────────────────────────────────────────────────────
+// One GET /api/cellar per user per page load, shared by every card. Each card
+// used to fire its own /api/cellar/check on mount — 40+ requests per feed
+// render. Matching is the same as the old endpoint: exact name + winery
+// (empty string when null). Mutations invalidate the cache so the next mount
+// refetches.
+let cellarCache = { userId: null, promise: null };
+function fetchCellar(userId) {
+  if (cellarCache.userId !== userId || !cellarCache.promise) {
+    cellarCache = {
+      userId,
+      promise: fetch(`${API}/api/cellar`).then(r => (r.ok ? r.json() : [])).catch(() => []),
+    };
+  }
+  return cellarCache.promise;
+}
+const invalidateCellar = () => { cellarCache = { userId: null, promise: null }; };
 const WINE_TYPE_COLORS = {
   Red: '#e74c3c', White: '#f1c40f', 'Rosé': '#e91e8c',
   Sparkling: '#3498db', Champagne: '#d4af37', Dessert: '#e67e22',
@@ -157,15 +175,20 @@ function WineCard({ wine: initialWine, currentUser, onDelete, onRelog, onUserCli
     requestAnimationFrame(() => setFlipAngle(snapAngle));
   };
 
-  // Load cellar status once
-  useState(() => {
+  // Load cellar status from the shared per-user cache (see fetchCellar above)
+  useEffect(() => {
     if (!currentUser) return;
-    fetch(`${API}/api/cellar/check?userId=${currentUser.id}&name=${encodeURIComponent(wine.name)}&winery=${encodeURIComponent(wine.winery || '')}`)
-      .then(r => r.json()).then(d => setCellarItem(d));
-  });
+    let on = true;
+    fetchCellar(currentUser.id).then(items => {
+      if (!on) return;
+      setCellarItem(items.find(i => i.name === wine.name && (i.winery || '') === (wine.winery || '')) || null);
+    });
+    return () => { on = false; };
+  }, [currentUser?.id, wine.name, wine.winery]);
 
   const saveToList = async (list) => {
     setShowSavePicker(false);
+    invalidateCellar();   // cache is stale after any mutation
     if (cellarItem) {
       if (cellarItem.list === list) {
         // Remove

@@ -212,8 +212,11 @@ router.post('/api/wines/:id/swipe', requireAuth, (req, res) => {
 router.get('/api/wines/trending', (req, res) => {
   const { uid, viewerId } = viewerIds(req);
 
+  // score = likes + comments (subqueries — the l/c join aliases are gone)
   const base = `
-    ${wineCardSelect(uid).replace('NULL AS reposted_by', `COUNT(DISTINCT l.user_id) + COUNT(DISTINCT c.id) AS score, NULL AS reposted_by`)}
+    ${wineCardSelect(uid).replace('NULL AS reposted_by',
+      `(SELECT COUNT(*) FROM likes sl WHERE sl.wine_id = w.id)
+     + (SELECT COUNT(*) FROM comments sc WHERE sc.wine_id = w.id) AS score, NULL AS reposted_by`)}
     ${wineCardJoins(uid)}
   `;
   const privacy = visibleWines(viewerId);
@@ -364,20 +367,9 @@ router.get('/api/wines', (req, res) => {
   if (feed === 'following' && uid) {
     const { clause: searchClause, vals: searchParams } = facetClauses();
 
-    const baseSelect = `
-      SELECT w.*, u.username, u.avatar_path, u.is_ambassador,
-             COUNT(DISTINCT l.user_id)  AS like_count,
-             COUNT(DISTINCT c.id)       AS comment_count,
-             MAX(CASE WHEN l2.user_id = ${uid} THEN 1 ELSE 0 END) AS user_liked,
-             COUNT(DISTINCT rp.user_id) AS repost_count,
-             MAX(CASE WHEN rp2.user_id = ${uid} THEN 1 ELSE 0 END) AS user_reposted,
-             ${TAGGED_SQL}
-    `;
-    const baseJoins = wineCardJoins(uid);
-
     const part1 = `
-      ${baseSelect}, NULL AS reposted_by, w.created_at AS feed_date
-      ${baseJoins}
+      ${wineCardSelect(uid)}, w.created_at AS feed_date
+      ${wineCardJoins(uid)}
       WHERE (w.user_id = ${uid} OR w.user_id IN (SELECT following_id FROM follows WHERE follower_id = ${uid}))
         AND ${visibleWines(viewerId)}
       ${searchClause}
@@ -385,8 +377,8 @@ router.get('/api/wines', (req, res) => {
     `;
 
     const part2 = `
-      ${baseSelect}, ru.username AS reposted_by, rpost.created_at AS feed_date
-      ${baseJoins}
+      ${wineCardSelect(uid).replace('NULL AS reposted_by', 'ru.username AS reposted_by')}, rpost.created_at AS feed_date
+      ${wineCardJoins(uid)}
       JOIN reposts rpost ON rpost.wine_id = w.id
       JOIN users ru      ON rpost.user_id = ru.id
       WHERE (rpost.user_id = ${uid} OR rpost.user_id IN (SELECT following_id FROM follows WHERE follower_id = ${uid}))
@@ -404,14 +396,7 @@ router.get('/api/wines', (req, res) => {
   const { clause: facetClause, vals: facetParams } = facetClauses();
   // taste_boost: posts matching the viewer's taste tags float up in Explore
   let sql = `
-    SELECT w.*, u.username, u.avatar_path, u.is_ambassador,
-           COUNT(DISTINCT l.user_id)  AS like_count,
-           COUNT(DISTINCT c.id)       AS comment_count,
-           MAX(CASE WHEN l2.user_id = ${uid} THEN 1 ELSE 0 END) AS user_liked,
-           COUNT(DISTINCT rp.user_id) AS repost_count,
-           MAX(CASE WHEN rp2.user_id = ${uid} THEN 1 ELSE 0 END) AS user_reposted,
-           ${TAGGED_SQL},
-           NULL AS reposted_by,
+    ${wineCardSelect(uid)},
            (
              (SELECT COUNT(*) FROM taste_tags tt
                WHERE tt.user_id = ${uid} AND tt.tag_type = 'type' AND tt.tag_value = w.type)

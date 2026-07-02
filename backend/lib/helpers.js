@@ -20,32 +20,35 @@ const publicUser = (row) => {
 const TAGGED_SQL = `(SELECT GROUP_CONCAT(tu.id || ':' || tu.username, ',') `
   + `FROM wine_tags wt JOIN users tu ON tu.id = wt.user_id WHERE wt.wine_id = w.id) AS tagged_users`;
 
+// Engagement counts as correlated subqueries. The previous version LEFT
+// JOINed likes × comments × reposts and used COUNT(DISTINCT …) + GROUP BY to
+// collapse the row explosion — O(likes × comments) intermediate rows per
+// wine. Each subquery here is a single indexed lookup per wine instead
+// (idx_likes_wine / idx_comments_wine / idx_reposts_wine), and the counts are
+// provably identical: likes has PK (wine_id, user_id) and reposts has
+// UNIQUE (user_id, wine_id), so COUNT(*) == COUNT(DISTINCT user_id).
+// Callers' `GROUP BY w.id` is now a no-op (w.id is unique after the single
+// users join) and is kept only so this change stays a drop-in.
 const wineCardSelect = (uid) => {
   uid = Number(uid) || 0;
   return `
     SELECT w.*, u.username, u.avatar_path, u.is_ambassador,
-           COUNT(DISTINCT l.user_id)  AS like_count,
-           COUNT(DISTINCT c.id)       AS comment_count,
-           MAX(CASE WHEN l2.user_id = ${uid} THEN 1 ELSE 0 END) AS user_liked,
-           COUNT(DISTINCT rp.user_id) AS repost_count,
-           MAX(CASE WHEN rp2.user_id = ${uid} THEN 1 ELSE 0 END) AS user_reposted,
+           (SELECT COUNT(*) FROM likes l     WHERE l.wine_id  = w.id) AS like_count,
+           (SELECT COUNT(*) FROM comments c  WHERE c.wine_id  = w.id) AS comment_count,
+           EXISTS(SELECT 1  FROM likes l2    WHERE l2.wine_id = w.id AND l2.user_id  = ${uid}) AS user_liked,
+           (SELECT COUNT(*) FROM reposts rp  WHERE rp.wine_id = w.id) AS repost_count,
+           EXISTS(SELECT 1  FROM reposts rp2 WHERE rp2.wine_id = w.id AND rp2.user_id = ${uid}) AS user_reposted,
            ${TAGGED_SQL},
            NULL AS reposted_by
   `;
 };
 
-const wineCardJoins = (uid) => {
-  uid = Number(uid) || 0;
-  return `
+// Counts live in wineCardSelect subqueries now, so the only join left is the
+// author. (uid is unused but kept so call sites don't churn.)
+const wineCardJoins = () => `
     FROM wines w
     JOIN users u ON w.user_id = u.id
-    LEFT JOIN likes l  ON l.wine_id  = w.id
-    LEFT JOIN likes l2 ON l2.wine_id = w.id AND l2.user_id = ${uid}
-    LEFT JOIN comments c  ON c.wine_id  = w.id
-    LEFT JOIN reposts rp  ON rp.wine_id  = w.id
-    LEFT JOIN reposts rp2 ON rp2.wine_id = w.id AND rp2.user_id = ${uid}
   `;
-};
 
 // The id used for engagement flags (user_liked / user_reposted).
 // Prefers the verified token; falls back to the query param for
