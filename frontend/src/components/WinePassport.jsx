@@ -150,10 +150,12 @@ export default function WinePassport({ onBack, userId, onWineClick }) {
       mount.appendChild(renderer.domElement);
       const composer = new EffectComposer(renderer);
       composer.addPass(new RenderPass(scene, camera));
-      composer.addPass(new UnrealBloomPass(new THREE.Vector2(w, h), 0.55, 0.5, 0.2));
+      // Threshold sits above the muted land/ocean tones, so only the gold
+      // country highlight and the region markers glow.
+      composer.addPass(new UnrealBloomPass(new THREE.Vector2(w, h), 0.45, 0.4, 0.3));
 
-      scene.add(new THREE.AmbientLight(0xffffff, 0.9));
-      const sun = new THREE.DirectionalLight(0x9ec2ff, 0.55);
+      scene.add(new THREE.AmbientLight(0xffffff, 0.72));
+      const sun = new THREE.DirectionalLight(0xfff3e0, 0.85);
       sun.position.copy(camera.position); scene.add(sun);
 
       // Starfield behind the globe — a bit of depth against the dark panel.
@@ -168,58 +170,61 @@ export default function WinePassport({ onBack, userId, onWineClick }) {
 
       const globe = new THREE.Group(); scene.add(globe);
 
-      // Ocean body — a dark sphere that gives the planet volume, hides the dots on
-      // the far side, and is the ray-cast target for taps.
-      const body = new THREE.Mesh(new THREE.SphereGeometry(0.992, 64, 64),
-        new THREE.MeshPhongMaterial({ color: 0x0a1a37, shininess: 14, specular: new THREE.Color(0x1b345c) }));
-      globe.add(body);
-
-      // ── Land as a dot matrix (the modern "cobe / Stripe" globe look) ──────
-      // A lat/lng grid, thinned toward the poles for even spacing; each land
-      // point becomes a dot. Tasted mainland → its palette colour, everything
-      // else → a dim neutral dot.
-      const DIM = new THREE.Color('#31405f');
-      const tmp = new THREE.Color();
-      const dPos = [], dCol = [], dBase = [], dotCanon = [];
-      for (let lat = -84; lat <= 84; lat += 1.8) {
-        const rows = Math.max(1, Math.round(Math.cos(lat * Math.PI / 180) * 195));
-        for (let k = 0; k < rows; k++) {
-          const lng = -180 + (360 * k) / rows;
-          const F = findFeat(lng, lat);
-          if (!F) continue;
-          const main = isMainland(F.cc, lng, lat);
-          const vivid = main ? colorByCanon.get(F.cc) : null;
-          const c = vivid ? tmp.set(vivid) : DIM;
-          const P = latLng(lat, lng, 1.001, THREE);
-          dPos.push(P.x, P.y, P.z); dCol.push(c.r, c.g, c.b); dBase.push(c.r, c.g, c.b);
-          dotCanon.push(main ? F.cc : '__x__');
-        }
-      }
-      // Soft round sprite so dots are circles, not squares.
-      const dcv = document.createElement('canvas'); dcv.width = dcv.height = 64;
-      const dctx = dcv.getContext('2d');
-      const grd = dctx.createRadialGradient(32, 32, 0, 32, 32, 32);
-      grd.addColorStop(0, 'rgba(255,255,255,1)'); grd.addColorStop(0.5, 'rgba(255,255,255,1)'); grd.addColorStop(1, 'rgba(255,255,255,0)');
-      dctx.fillStyle = grd; dctx.beginPath(); dctx.arc(32, 32, 32, 0, Math.PI * 2); dctx.fill();
-      const dotTex = new THREE.CanvasTexture(dcv);
-      const dotGeo = new THREE.BufferGeometry();
-      dotGeo.setAttribute('position', new THREE.Float32BufferAttribute(dPos, 3));
-      dotGeo.setAttribute('color', new THREE.Float32BufferAttribute(dCol, 3));
-      const dots = new THREE.Points(dotGeo, new THREE.PointsMaterial({
-        size: 0.03, map: dotTex, alphaTest: 0.5, transparent: true, sizeAttenuation: true, vertexColors: true,
-      }));
-      globe.add(dots);
-      const dotColorAttr = dotGeo.getAttribute('color');
-      const GOLD = new THREE.Color('#ffd23f');
-      const highlight = (cc) => {
-        for (let i = 0; i < dotCanon.length; i++) {
-          if (cc && dotCanon[i] === cc) dotColorAttr.setXYZ(i, GOLD.r, GOLD.g, GOLD.b);
-          else dotColorAttr.setXYZ(i, dBase[i * 3], dBase[i * 3 + 1], dBase[i * 3 + 2]);
-        }
-        dotColorAttr.needsUpdate = true;
+      // ── Continent texture: solid landmasses, tasted countries vivid ───────
+      // Painted on a canvas and wrapped on the sphere — the "real planet" look
+      // (gradient ocean, coastlines, colour-filled countries). Repainted on tap
+      // to light the selected country gold.
+      const CW = 2048, CH = 1024;
+      const cv = document.createElement('canvas'); cv.width = CW; cv.height = CH;
+      const cx = cv.getContext('2d');
+      const px = (lng) => (lng + 180) / 360 * CW, py = (lat) => (90 - lat) / 180 * CH;
+      const tracePath = (ring) => { ring.forEach(([lng, lat], i) => { const x = px(lng), y = py(lat); i ? cx.lineTo(x, y) : cx.moveTo(x, y); }); };
+      const draw = (ring) => { cx.beginPath(); tracePath(ring); cx.closePath(); cx.fill(); };
+      const drawFeature = (geom) => {
+        if (geom.type === 'Polygon') geom.coordinates.forEach(draw);
+        else if (geom.type === 'MultiPolygon') geom.coordinates.forEach(poly => poly.forEach(draw));
       };
+      const strokeFeature = (geom) => {
+        const rings = geom.type === 'Polygon' ? geom.coordinates : geom.type === 'MultiPolygon' ? geom.coordinates.flat() : [];
+        for (const ring of rings) { cx.beginPath(); tracePath(ring); cx.closePath(); cx.stroke(); }
+      };
+      // Vivid fill limited to the country's mainland — keeps overseas territories
+      // (e.g. French Guiana) in the muted tone instead of the tasted colour.
+      const drawMainland = (geom, cc) => {
+        const polys = geom.type === 'Polygon' ? [geom.coordinates] : geom.type === 'MultiPolygon' ? geom.coordinates : [];
+        for (const poly of polys) { const [clng, clat] = ringC(poly[0]); if (isMainland(cc, clng, clat)) poly.forEach(draw); }
+      };
+      const paint = (highlightCanon) => {
+        // Ocean — deep at the poles, brighter at the equator.
+        const og = cx.createLinearGradient(0, 0, 0, CH);
+        og.addColorStop(0, '#071026'); og.addColorStop(0.5, '#12345f'); og.addColorStop(1, '#071026');
+        cx.fillStyle = og; cx.fillRect(0, 0, CW, CH);
+        // Faint graticule so it reads as a globe.
+        cx.strokeStyle = 'rgba(130,170,220,0.07)'; cx.lineWidth = 1.5;
+        for (let lng = -180; lng <= 180; lng += 30) { cx.beginPath(); cx.moveTo(px(lng), 0); cx.lineTo(px(lng), CH); cx.stroke(); }
+        for (let lat = -60; lat <= 60; lat += 30) { cx.beginPath(); cx.moveTo(0, py(lat)); cx.lineTo(CW, py(lat)); cx.stroke(); }
+        // Pass 1 — all land in the muted earthy base.
+        cx.fillStyle = '#6b7360';
+        for (const f of land.features) drawFeature(f.geometry);
+        // Pass 2 — tasted/tapped countries vivid, mainland only.
+        for (const B of boxes) {
+          const vivid = B.cc === highlightCanon ? '#ffd76a' : colorByCanon.get(B.cc);
+          if (!vivid) continue;
+          cx.fillStyle = vivid; drawMainland(B.f.geometry, B.cc);
+        }
+        // Coastlines / borders.
+        cx.strokeStyle = 'rgba(6,12,24,0.55)'; cx.lineWidth = 1.3; cx.lineJoin = 'round';
+        for (const f of land.features) strokeFeature(f.geometry);
+        tex.needsUpdate = true;
+      };
+      const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
+      const body = new THREE.Mesh(new THREE.SphereGeometry(1, 96, 96),
+        new THREE.MeshPhongMaterial({ map: tex, shininess: 12, specular: new THREE.Color(0x2a3f66) }));
+      globe.add(body);
+      paint(null);
+      const highlight = (cc) => paint(cc);
 
-      // Small static markers at your exact wine regions.
+      // Small glowing markers at your exact wine regions (bloom makes them pop).
       for (const p of pins) {
         const at = latLng(p.lat, p.lng, 1.008, THREE);
         const m = new THREE.Mesh(new THREE.SphereGeometry(0.015, 12, 12), new THREE.MeshBasicMaterial({ color: 0xfff0c4 }));
@@ -342,16 +347,14 @@ export default function WinePassport({ onBack, userId, onWineClick }) {
         tour.active = true; tour.queue = stops; tour.dwell = 0;
       };
 
-      // Intro — dots swell in and the globe settles to full size (ease-out).
+      // Intro — the globe settles up to full size (ease-out).
       let introT = 0;
-      const DOT_SIZE = dots.material.size;
 
       const animate = () => {
         frame = requestAnimationFrame(animate);
         if (introT < 1) {
           introT = Math.min(1, introT + 0.022);
           const e = 1 - Math.pow(1 - introT, 3);
-          dots.material.size = DOT_SIZE * e; dots.material.opacity = e;
           globe.scale.setScalar(0.94 + 0.06 * e);
         }
         if (focusTarget) { camera.position.lerp(focusTarget, 0.08); if (camera.position.distanceTo(focusTarget) < 0.02) focusTarget = null; }
@@ -361,7 +364,7 @@ export default function WinePassport({ onBack, userId, onWineClick }) {
           else if (tour.queue.length) {
             const s = tour.queue.shift();
             const local = latLng(s.lat, s.lng, 1, THREE);
-            focusTarget = globe.localToWorld(local.clone()).normalize().multiplyScalar(1.75);
+            focusTarget = globe.localToWorld(local.clone()).normalize().multiplyScalar(2.1);   // frame the country with margin
             highlight(s.cc);
             showLabel(local.normalize(), s.name, subFor(s.agg));
             spawnRipple(local.normalize());
