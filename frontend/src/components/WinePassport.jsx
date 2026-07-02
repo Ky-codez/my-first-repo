@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Play } from '@phosphor-icons/react';
 import { resolveLocation, REGIONS } from '../utils/wineGeo.js';
 import { WineTypeIcon } from './wineIcons.jsx';
 
@@ -44,6 +45,8 @@ function inFeature(lng, lat, geom) {
 export default function WinePassport({ onBack, userId, onWineClick }) {
   const mountRef = useRef(null);
   const focusRef = useRef(null);   // effect assigns: (lat,lng) => zoom the globe there
+  const labelRef = useRef(null);   // floating glass country label over the globe
+  const tourRef = useRef(null);    // effect assigns: () => fly through tasted countries
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);   // tapped country { name, wines:[...] }
   const [region, setRegion] = useState(null);        // drilled-into region name (null = country level)
@@ -52,6 +55,8 @@ export default function WinePassport({ onBack, userId, onWineClick }) {
 
   // Tapping a new country resets the region drill + any open mini card.
   useEffect(() => { setRegion(null); setMiniWine(null); }, [selected]);
+  // Closing the card (× / Close) also hides the floating globe label.
+  useEffect(() => { if (!selected && labelRef.current) labelRef.current.style.display = 'none'; }, [selected]);
 
   useEffect(() => {
     let renderer, scene, camera, controls, frame, ro, disposed = false;
@@ -87,6 +92,9 @@ export default function WinePassport({ onBack, userId, onWineClick }) {
 
       const THREE = await import('three');
       const { OrbitControls } = await import('three/examples/jsm/controls/OrbitControls.js');
+      const { EffectComposer } = await import('three/examples/jsm/postprocessing/EffectComposer.js');
+      const { RenderPass } = await import('three/examples/jsm/postprocessing/RenderPass.js');
+      const { UnrealBloomPass } = await import('three/examples/jsm/postprocessing/UnrealBloomPass.js');
       const topojson = await import('topojson-client');
       const world = (await import('world-atlas/countries-110m.json')).default;
       if (disposed || !mount) return;
@@ -136,7 +144,13 @@ export default function WinePassport({ onBack, userId, onWineClick }) {
       renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
       renderer.setSize(w, h); renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
       renderer.outputColorSpace = THREE.SRGBColorSpace;
+      // Bloom makes bright dots/markers glow like neon — the composer owns the
+      // clear colour, so match the panel's deep plum backdrop.
+      renderer.setClearColor(new THREE.Color('#0b0714'), 1);
       mount.appendChild(renderer.domElement);
+      const composer = new EffectComposer(renderer);
+      composer.addPass(new RenderPass(scene, camera));
+      composer.addPass(new UnrealBloomPass(new THREE.Vector2(w, h), 0.55, 0.5, 0.2));
 
       scene.add(new THREE.AmbientLight(0xffffff, 0.9));
       const sun = new THREE.DirectionalLight(0x9ec2ff, 0.55);
@@ -248,10 +262,36 @@ export default function WinePassport({ onBack, userId, onWineClick }) {
       controls.minDistance = 1.5; controls.maxDistance = 4; controls.rotateSpeed = 0.55;
       controls.autoRotate = true; controls.autoRotateSpeed = 0.28;   // calm, slow drift
 
-      // Tap a country → find it, highlight it, zoom in, show its wines.
+      // Tap ripple — an expanding gold ring at the tap point, oriented to the
+      // surface, that fades out. Instant tactile feedback.
+      const ripples = [];
+      const spawnRipple = (localUnit) => {
+        const ring = new THREE.Mesh(new THREE.RingGeometry(0.02, 0.028, 40),
+          new THREE.MeshBasicMaterial({ color: 0xffd76a, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false }));
+        ring.position.copy(localUnit.clone().multiplyScalar(1.006));
+        ring.lookAt(globe.localToWorld(localUnit.clone().multiplyScalar(2)));
+        globe.add(ring);
+        ripples.push({ mesh: ring, t: 0 });
+      };
+
+      // Floating glass label — HTML pill projected onto the tapped point each
+      // frame (screen-space), so it tracks the globe as it spins.
+      let labelData = null;   // { pos: local unit Vector3, }
+      const showLabel = (localUnit, name, sub) => {
+        const el = labelRef.current; if (!el) return;
+        el.firstChild.textContent = name; el.lastChild.textContent = sub;
+        el.style.display = 'flex';
+        labelData = { pos: localUnit.clone().multiplyScalar(1.03) };
+      };
+      const hideLabel = () => { labelData = null; if (labelRef.current) labelRef.current.style.display = 'none'; };
+      const subFor = (agg) => agg
+        ? `${agg.count} wine${agg.count === 1 ? '' : 's'} · ${(agg.total / agg.count).toFixed(1)}★`
+        : 'No wines logged yet';
+
+      // Tap a country → ripple, gold dots, zoom, label + card.
       const ray = new THREE.Raycaster();
       let downX = 0, downY = 0, focusTarget = null;
-      const onDown = (e) => { downX = e.clientX; downY = e.clientY; controls.autoRotate = false; };
+      const onDown = (e) => { downX = e.clientX; downY = e.clientY; controls.autoRotate = false; tour.active = false; };
       const onUp = (e) => {
         if (Math.hypot(e.clientX - downX, e.clientY - downY) > 6) return;
         const rect = renderer.domElement.getBoundingClientRect();
@@ -263,12 +303,14 @@ export default function WinePassport({ onBack, userId, onWineClick }) {
         // frame, which is rotated (see globe.rotation.y). Convert back before
         // inverting to lat/lng, or every tap lands a continent off.
         const localHit = globe.worldToLocal(hit.point.clone()).normalize();
+        spawnRipple(localHit);
         const [lng, lat] = toLatLng(localHit);
         const F = findFeat(lng, lat);
-        if (!F) { setSelected(null); highlight(null); return; }   // ocean → clear
+        if (!F) { setSelected(null); highlight(null); hideLabel(); return; }   // ocean → clear
         highlight(F.cc);                                          // gold the tapped country's dots
         focusTarget = hit.point.clone().normalize().multiplyScalar(1.9);
         const agg = byCountry.get(F.cc);
+        showLabel(localHit, agg ? agg.country : F.f.properties.name, subFor(agg));
         setSelected(agg ? { ...agg, name: agg.country } : { name: F.f.properties.name, count: 0, wines: [] });
       };
       renderer.domElement.addEventListener('pointerdown', onDown);
@@ -283,17 +325,75 @@ export default function WinePassport({ onBack, userId, onWineClick }) {
         focusTarget = world.normalize().multiplyScalar(1.6);
       };
 
+      // "Tour" — cinematic fly-through of every tasted country, west→east.
+      // Each stop golds the country's dots and shows the label; great for a
+      // screen-recorded share.
+      const tour = { active: false, queue: [], dwell: 0 };
+      tourRef.current = () => {
+        const stops = [];
+        for (const [cc, agg] of byCountry) {
+          const c = mainC.get(cc); if (!c) continue;
+          stops.push({ lng: c[0], lat: c[1], cc, name: agg.country, agg });
+        }
+        if (!stops.length) return;
+        stops.sort((a, b) => a.lng - b.lng);
+        controls.autoRotate = false;
+        setSelected(null);
+        tour.active = true; tour.queue = stops; tour.dwell = 0;
+      };
+
+      // Intro — dots swell in and the globe settles to full size (ease-out).
+      let introT = 0;
+      const DOT_SIZE = dots.material.size;
+
       const animate = () => {
         frame = requestAnimationFrame(animate);
+        if (introT < 1) {
+          introT = Math.min(1, introT + 0.022);
+          const e = 1 - Math.pow(1 - introT, 3);
+          dots.material.size = DOT_SIZE * e; dots.material.opacity = e;
+          globe.scale.setScalar(0.94 + 0.06 * e);
+        }
         if (focusTarget) { camera.position.lerp(focusTarget, 0.08); if (camera.position.distanceTo(focusTarget) < 0.02) focusTarget = null; }
+        // Tour stepping: dwell at each stop once the camera has arrived.
+        if (tour.active && !focusTarget) {
+          if (tour.dwell > 0) tour.dwell--;
+          else if (tour.queue.length) {
+            const s = tour.queue.shift();
+            const local = latLng(s.lat, s.lng, 1, THREE);
+            focusTarget = globe.localToWorld(local.clone()).normalize().multiplyScalar(1.75);
+            highlight(s.cc);
+            showLabel(local.normalize(), s.name, subFor(s.agg));
+            spawnRipple(local.normalize());
+            tour.dwell = 85;
+          } else { tour.active = false; highlight(null); hideLabel(); }
+        }
+        // Ripples expand + fade.
+        for (let i = ripples.length - 1; i >= 0; i--) {
+          const r = ripples[i]; r.t += 0.028;
+          r.mesh.scale.setScalar(1 + r.t * 7); r.mesh.material.opacity = 0.9 * (1 - r.t);
+          if (r.t >= 1) { globe.remove(r.mesh); r.mesh.geometry.dispose(); r.mesh.material.dispose(); ripples.splice(i, 1); }
+        }
+        // Keep the label pinned to its point; hide it when it rotates behind.
+        if (labelData && labelRef.current) {
+          const wp = globe.localToWorld(labelData.pos.clone());
+          const facing = wp.clone().normalize().dot(camera.position.clone().normalize()) > 0.35;
+          const sp = wp.project(camera);
+          if (facing && sp.z < 1) {
+            const rw = renderer.domElement.clientWidth, rh = renderer.domElement.clientHeight;
+            labelRef.current.style.display = 'flex';
+            labelRef.current.style.left = `${(sp.x * 0.5 + 0.5) * rw}px`;
+            labelRef.current.style.top = `${(-sp.y * 0.5 + 0.5) * rh}px`;
+          } else labelRef.current.style.display = 'none';
+        }
         sun.position.copy(camera.position);        // keep the face you're looking at lit
         stars.rotation.y += 0.0002;                // barely-there drift
-        controls.update(); renderer.render(scene, camera);
+        controls.update(); composer.render();
       };
       animate();
-      ro = new ResizeObserver(() => { const nw = mount.clientWidth, nh = mount.clientHeight || 360; camera.aspect = nw / nh; camera.updateProjectionMatrix(); renderer.setSize(nw, nh); });
+      ro = new ResizeObserver(() => { const nw = mount.clientWidth, nh = mount.clientHeight || 360; camera.aspect = nw / nh; camera.updateProjectionMatrix(); renderer.setSize(nw, nh); composer.setSize(nw, nh); });
       ro.observe(mount);
-      cleanup = () => { renderer.domElement.removeEventListener('pointerdown', onDown); renderer.domElement.removeEventListener('pointerup', onUp); };
+      cleanup = () => { renderer.domElement.removeEventListener('pointerdown', onDown); renderer.domElement.removeEventListener('pointerup', onUp); composer.dispose?.(); };
     })();
 
     let cleanup = () => {};
@@ -331,7 +431,7 @@ export default function WinePassport({ onBack, userId, onWineClick }) {
     <div className="passport-page">
       <button className="back-btn" onClick={onBack}>← Back</button>
       <div className="passport-hero">
-        <h1><span className="ph-icon">{GlobeIcon}</span> Wine Passport</h1>
+        <h1><span className="ph-icon">{GlobeIcon}</span> <span className="ph-grad">Wine Passport</span></h1>
         <p>Spin the globe — lit-up countries are ones you've tasted. Tap one, then a region, to revisit your wines.</p>
       </div>
 
@@ -344,6 +444,13 @@ export default function WinePassport({ onBack, userId, onWineClick }) {
 
       <div className="passport-globe" ref={mountRef}>
         {loading && <p className="passport-loading">Spinning up the globe…</p>}
+        {/* Floating glass label pinned to the tapped country (positioned per-frame) */}
+        <div className="pg-label" ref={labelRef} style={{ display: 'none' }}><b></b><span></span></div>
+        {!loading && stats.countries > 0 && (
+          <button className="pg-tour-btn" onClick={() => tourRef.current?.()}>
+            <Play size={12} weight="fill" /> Tour my journey
+          </button>
+        )}
       </div>
 
       {selected && (

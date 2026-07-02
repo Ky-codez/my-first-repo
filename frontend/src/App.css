@@ -1392,13 +1392,40 @@ body { -webkit-overflow-scrolling: touch; }
 
 .passport-page { max-width: 640px; margin: 0 auto; padding: 0 0.85rem 1.5rem; box-sizing: border-box; overflow-x: hidden; }
 .passport-hero { text-align: center; padding: 0.35rem 0 0.6rem; }
-.passport-hero h1 { font-size: 1.4rem; color: #c0392b; display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; }
+.passport-hero h1 { font-size: 1.45rem; color: #c0392b; display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; letter-spacing: -0.02em; }
 .ph-icon { display: inline-flex; color: #c0392b; }
+/* Gradient wordmark — warm wine → violet, the modern "hero text" treatment. */
+.ph-grad { background: linear-gradient(92deg, #ff8a5c 0%, #e0533f 45%, #b06fd6 100%); -webkit-background-clip: text; background-clip: text; color: transparent; font-weight: 800; }
 .passport-hero p { font-size: 0.8rem; color: var(--text-muted); margin-top: 0.25rem; }
-.passport-stats { display: flex; gap: 0.4rem; margin-bottom: 0.7rem; }
-.ps-stat { flex: 1; background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 0.6rem 0.3rem; text-align: center; }
-.ps-val { display: block; font-size: 1.1rem; font-weight: 800; color: #e07060; }
+/* Frosted-glass stat chips with gradient numerals. */
+.passport-stats { display: flex; gap: 0.45rem; margin-bottom: 0.7rem; }
+.ps-stat { flex: 1; background: rgba(255,255,255,0.035); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.09); border-radius: 14px; padding: 0.6rem 0.3rem; text-align: center; }
+.ps-val { display: block; font-size: 1.15rem; font-weight: 800; background: linear-gradient(120deg, #ffb25e, #e0533f 55%, #c98fe0); -webkit-background-clip: text; background-clip: text; color: transparent; }
 .ps-lbl { display: block; font-size: 0.58rem; text-transform: uppercase; letter-spacing: 0.4px; color: var(--text-muted); margin-top: 2px; }
+
+/* Floating glass country label over the globe (positioned per-frame by JS). */
+.pg-label {
+  position: absolute; z-index: 3; pointer-events: none;
+  transform: translate(-50%, -135%);
+  flex-direction: column; align-items: center; gap: 0;
+  background: rgba(16, 9, 20, 0.62); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255,255,255,0.16); border-radius: 12px; padding: 0.32rem 0.65rem;
+  box-shadow: 0 6px 22px rgba(0,0,0,0.45);
+}
+.pg-label b { font-size: 0.82rem; color: var(--text); line-height: 1.2; white-space: nowrap; }
+.pg-label span { font-size: 0.66rem; color: var(--text-muted); white-space: nowrap; }
+
+/* "Tour my journey" — frosted pill in the globe's corner. */
+.pg-tour-btn {
+  position: absolute; bottom: 0.7rem; right: 0.7rem; z-index: 3;
+  display: inline-flex; align-items: center; gap: 0.35rem;
+  background: rgba(20, 11, 24, 0.55); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255,255,255,0.16); border-radius: 999px;
+  color: var(--text); font-size: 0.74rem; font-weight: 700; padding: 0.38rem 0.8rem;
+  cursor: pointer; transition: border-color 0.15s, transform 0.12s;
+}
+.pg-tour-btn:hover { border-color: #e0533f; transform: translateY(-1px); }
+.pg-tour-btn:active { transform: scale(0.97); }
 .passport-globe { width: 100%; height: clamp(260px, 48vh, 420px); border-radius: 16px; overflow: hidden; touch-action: none; cursor: grab;
   background: radial-gradient(130% 100% at 50% 30%, #1a1030 0%, #0a0610 70%); position: relative; }
 .passport-loading { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 0.9rem; }
