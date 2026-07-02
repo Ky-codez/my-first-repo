@@ -263,9 +263,11 @@ export default function WinePassport({ onBack, userId, onWineClick }) {
       scene.add(atmo);
 
       controls = new OrbitControls(camera, renderer.domElement);
-      controls.enablePan = false; controls.enableDamping = true; controls.dampingFactor = 0.08;
-      controls.minDistance = 1.5; controls.maxDistance = 4; controls.rotateSpeed = 0.55;
-      controls.autoRotate = true; controls.autoRotateSpeed = 0.28;   // calm, slow drift
+      // Slow, controlled feel: low rotateSpeed, higher damping (kills long
+      // inertia glides), gentle auto-drift.
+      controls.enablePan = false; controls.enableDamping = true; controls.dampingFactor = 0.14;
+      controls.minDistance = 1.5; controls.maxDistance = 4; controls.rotateSpeed = 0.3;
+      controls.autoRotate = true; controls.autoRotateSpeed = 0.18;
 
       // Tap ripple — an expanding gold ring at the tap point, oriented to the
       // surface, that fades out. Instant tactile feedback.
