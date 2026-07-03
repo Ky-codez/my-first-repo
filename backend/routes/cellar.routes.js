@@ -46,6 +46,35 @@ router.delete('/api/cellar/:id', requireAuth, (req, res) => {
   res.json({ ok: true });
 });
 
+// Tonight from your cellar — ONE gentle pick from bottles the user owns
+// (list = 'cellar'; wishlist bottles aren't in their inventory). Deterministic
+// per day so the suggestion is stable within a day but rotates daily, plus a
+// human "reason" line. Returns null when the cellar is empty — the client
+// shows nothing.
+router.get('/api/cellar/tonight', requireAuth, (req, res) => {
+  const bottles = db.prepare(
+    "SELECT * FROM cellar WHERE user_id = ? AND list = 'cellar' ORDER BY created_at ASC, id ASC"
+  ).all(req.user.id);
+  if (!bottles.length) return res.json(null);
+
+  const day  = Math.floor(Date.now() / 86400000);
+  const pick = bottles[day % bottles.length];
+
+  // created_at is SQLite datetime('now') — 'YYYY-MM-DD HH:MM:SS' in UTC.
+  const addedMs  = new Date(pick.created_at.replace(' ', 'T') + 'Z').getTime();
+  const days     = Math.max(0, Math.floor((Date.now() - addedMs) / 86400000));
+  const sameType = pick.type ? bottles.filter(b => b.type === pick.type).length : 0;
+
+  let reason;
+  if (bottles.length === 1)               reason = 'The only bottle in your cellar — no pressure';
+  else if (days >= 60)                    reason = `Resting in your cellar for ${Math.round(days / 30)} months`;
+  else if (days >= 14)                    reason = `Resting in your cellar for ${Math.floor(days / 7)} weeks`;
+  else if (pick.type && sameType === 1)   reason = `Your only ${pick.type.toLowerCase()} in the cellar`;
+  else                                    reason = `One of ${bottles.length} bottles waiting in your cellar`;
+
+  res.json({ ...pick, reason, bottle_count: bottles.length });
+});
+
 // Is this wine in my cellar? (by name + winery)
 router.get('/api/cellar/check', requireAuth, (req, res) => {
   const { name, winery } = req.query;
