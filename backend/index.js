@@ -108,11 +108,13 @@ if (fs.existsSync(distDir)) {
   }));
   // SPA fallback as a path-less middleware — Express 5 dropped the bare '*'
   // route pattern, so we match here instead. Only GETs for non-API, non-upload
-  // paths fall through to index.html.
+  // paths fall through to index.html. Public share links (/@user/<slug>,
+  // /share/wine/:id, /@user) get Open Graph meta injected so pasted links
+  // unfurl with the wine's photo + rating (lib/ogMeta.js).
+  const { sendIndexWithOg } = require('./lib/ogMeta');
   app.use((req, res, next) => {
     if (req.method !== 'GET' || req.path.startsWith('/api') || req.path.startsWith('/uploads')) return next();
-    res.setHeader('Cache-Control', 'no-cache');
-    res.sendFile(path.join(distDir, 'index.html'));
+    sendIndexWithOg(req, res, distDir);
   });
 }
 

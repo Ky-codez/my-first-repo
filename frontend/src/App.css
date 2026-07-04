@@ -1581,6 +1581,15 @@ body { -webkit-overflow-scrolling: touch; }
 }
 .share-hint { font-size: 0.82rem; color: var(--text-muted); text-align: center; margin: 0 0 1rem; flex-shrink: 0; }
 .share-actions { display: flex; gap: 0.6rem; flex-wrap: wrap; flex-shrink: 0; }
+
+/* Story / Card format toggle */
+.share-fmt-toggle { display: flex; gap: 4px; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 20px; padding: 3px; margin-top: 0.75rem; flex-shrink: 0; }
+.share-fmt-btn { flex: 1; background: transparent; border: none; border-radius: 16px; padding: 0.4rem 0; font-size: 0.85rem; font-weight: 600; color: var(--text-muted); transition: all 0.15s; }
+.share-fmt-btn.active { background: var(--bg-card); color: var(--text); box-shadow: 0 2px 8px rgba(0,0,0,0.25); }
+
+/* 9:16 story preview — kept phone-height inside the modal */
+.share-story-preview { display: block; margin: 0 auto; height: 100%; max-height: 480px; width: auto; border-radius: 14px; }
+.share-story-loading { aspect-ratio: 9 / 16; max-height: 480px; display: flex; align-items: center; justify-content: center; background: var(--bg-deep); color: var(--text-muted); font-size: 0.85rem; width: auto; min-width: 240px; }
 .share-dl-btn  { flex: 1; }
 .share-link-btn { flex: 1; }
 
@@ -2333,6 +2342,32 @@ body::before {
 .streak-chip strong { font-size: 0.9rem; color: #e07060; }
 .streak-chip span { font-size: 0.78rem; color: var(--text-muted); margin-left: auto; text-align: right; }
 .streak-chip:hover { border-color: #c0392b; }
+
+/* ── Tonight from your cellar ── */
+.tonight-card {
+  display: flex; align-items: center; gap: 0.65rem; width: 100%;
+  background: linear-gradient(100deg, #8e44ad18, #c0392b18); border: 1px solid #8e44ad44;
+  border-radius: 12px; padding: 0.6rem 0.9rem; margin: 0 0 0.75rem;
+}
+.tonight-icon { color: #b07cc6; flex-shrink: 0; }
+.tonight-body {
+  flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px;
+  background: none; border: none; padding: 0; text-align: left; font-family: inherit; color: var(--text);
+}
+.tonight-eyebrow { font-size: 0.66rem; color: #b07cc6; text-transform: uppercase; letter-spacing: 1.2px; font-weight: 700; }
+.tonight-title   { font-size: 0.92rem; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tonight-winery  { font-weight: 500; color: var(--text-muted); }
+.tonight-reason  { font-size: 0.76rem; color: var(--text-muted); }
+.tonight-open-btn {
+  flex-shrink: 0; background: #8e44ad33; border: 1px solid #8e44ad66; border-radius: 18px;
+  color: var(--text); font-size: 0.8rem; font-weight: 600; padding: 0.35rem 0.85rem; transition: background 0.15s;
+}
+.tonight-open-btn:hover { background: #8e44ad55; }
+.tonight-dismiss {
+  flex-shrink: 0; background: none; border: none; color: var(--text-dim);
+  padding: 0.3rem; display: flex; align-items: center; border-radius: 50%;
+}
+.tonight-dismiss:hover { color: var(--text); }
 
 /* ── Public Profile ──────────────────────────────────────────────────────── */
 .profile-header-content { flex: 1; }

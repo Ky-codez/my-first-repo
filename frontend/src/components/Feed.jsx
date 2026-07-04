@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import WineCard from './WineCard.jsx';
 import SkeletonCard from './SkeletonCard.jsx';
 import MainMenu from './MainMenu.jsx';
+import TonightCard from './TonightCard.jsx';
 import { getMoonInfo, TYPE_INFO, PHASE_INFO } from '../utils/moonCalendar.js';
 import { useLang } from '../i18n.jsx';
 import { Fire, Users, Dna, Plant } from '@phosphor-icons/react';
@@ -150,6 +151,10 @@ export default function Feed({ currentUser, onAddWine, onRelog, onUserClick, onL
           <span>{streak === 1 ? 'Logged this week — nice!' : 'Log a wine this week to keep it going'}</span>
         </button>
       )}
+
+      {/* Tonight from your cellar — gentle reminder of a bottle the user
+          owns. One tap pre-fills the log form; dismiss snoozes it. */}
+      <TonightCard currentUser={currentUser} onLog={onRelog} />
 
       {/* Feed mode toggle */}
       <div className="feed-mode-toggle">
